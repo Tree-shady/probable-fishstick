@@ -171,11 +171,66 @@ class AIChat:
         self.conversation_history = []
         print("\n对话历史已清空！")
     
+    def save_history(self):
+        """保存对话历史到文件"""
+        if not self.conversation_history:
+            print("\n对话历史为空，无需保存！")
+            return
+        
+        filename = input("\n请输入保存文件名（默认：chat_history.json）: ").strip()
+        if not filename:
+            filename = "chat_history.json"
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(self.conversation_history, f, indent=2, ensure_ascii=False)
+            print(f"\n对话历史已保存到 {filename}！")
+        except Exception as e:
+            print(f"\n保存对话历史失败: {str(e)}")
+    
+    def export_config(self):
+        """导出配置到文件"""
+        filename = input("\n请输入导出文件名（默认：config_export.json）: ").strip()
+        if not filename:
+            filename = "config_export.json"
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+            print(f"\n配置已导出到 {filename}！")
+        except Exception as e:
+            print(f"\n导出配置失败: {str(e)}")
+    
+    def import_config(self):
+        """从文件导入配置"""
+        filename = input("\n请输入导入文件名: ").strip()
+        if not filename:
+            print("\n请输入有效的文件名！")
+            return
+        
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                imported_config = json.load(f)
+            
+            # 合并导入的配置
+            self.config.update(imported_config)
+            self.save_config()
+            print(f"\n配置已从 {filename} 导入并保存！")
+        except FileNotFoundError:
+            print(f"\n文件 {filename} 不存在！")
+        except json.JSONDecodeError:
+            print(f"\n文件 {filename} 格式错误！")
+        except Exception as e:
+            print(f"\n导入配置失败: {str(e)}")
+    
     def show_help(self):
         """显示帮助信息"""
         print("\n=== 命令帮助 ===")
         print("/config    - 更新API配置")
         print("/clear     - 清空对话历史")
+        print("/save      - 保存对话历史到文件")
+        print("/export    - 导出配置到文件")
+        print("/import    - 从文件导入配置")
         print("/help      - 显示帮助信息")
         print("/exit      - 退出程序")
     
@@ -202,6 +257,12 @@ class AIChat:
                         self.update_config()
                     elif command == "/clear":
                         self.clear_history()
+                    elif command == "/save":
+                        self.save_history()
+                    elif command == "/export":
+                        self.export_config()
+                    elif command == "/import":
+                        self.import_config()
                     elif command == "/help":
                         self.show_help()
                     elif command == "/exit":

@@ -496,6 +496,21 @@ class AIChatPyQt(QMainWindow):
         clear_action.triggered.connect(self.clear_history)
         file_menu.addAction(clear_action)
         
+        # 添加新功能菜单
+        file_menu.addSeparator()
+        
+        save_history_action = QAction("保存对话历史", self)
+        save_history_action.triggered.connect(self.save_history)
+        file_menu.addAction(save_history_action)
+        
+        export_config_action = QAction("导出配置", self)
+        export_config_action.triggered.connect(self.export_config)
+        file_menu.addAction(export_config_action)
+        
+        import_config_action = QAction("导入配置", self)
+        import_config_action.triggered.connect(self.import_config)
+        file_menu.addAction(import_config_action)
+        
         file_menu.addSeparator()
         
         exit_action = QAction("退出", self)
@@ -687,6 +702,69 @@ class AIChatPyQt(QMainWindow):
 支持自定义API大模型的对话软件，
 可以配置不同的API URL、API密钥和模型。"""
         QMessageBox.information(self, "关于", about_text)
+    
+    def save_history(self):
+        """保存对话历史到文件"""
+        if not self.conversation_history:
+            QMessageBox.information(self, "提示", "对话历史为空，无需保存！")
+            return
+        
+        from PyQt6.QtWidgets import QFileDialog
+        
+        # 打开文件保存对话框
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "保存对话历史", "chat_history.json", "JSON文件 (*.json)"
+        )
+        
+        if filename:
+            try:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(self.conversation_history, f, indent=2, ensure_ascii=False)
+                QMessageBox.information(self, "成功", f"对话历史已保存到 {filename}！")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"保存对话历史失败: {str(e)}")
+    
+    def export_config(self):
+        """导出配置到文件"""
+        from PyQt6.QtWidgets import QFileDialog
+        
+        # 打开文件保存对话框
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "导出配置", "config_export.json", "JSON文件 (*.json)"
+        )
+        
+        if filename:
+            try:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(self.config, f, indent=2, ensure_ascii=False)
+                QMessageBox.information(self, "成功", f"配置已导出到 {filename}！")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"导出配置失败: {str(e)}")
+    
+    def import_config(self):
+        """从文件导入配置"""
+        from PyQt6.QtWidgets import QFileDialog
+        
+        # 打开文件选择对话框
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "导入配置", "", "JSON文件 (*.json)"
+        )
+        
+        if filename:
+            try:
+                with open(filename, 'r', encoding='utf-8') as f:
+                    imported_config = json.load(f)
+                
+                # 合并导入的配置
+                self.config.update(imported_config)
+                self.save_config()
+                QMessageBox.information(self, "成功", f"配置已从 {filename} 导入并保存！")
+            except FileNotFoundError:
+                QMessageBox.critical(self, "错误", f"文件 {filename} 不存在！")
+            except json.JSONDecodeError:
+                QMessageBox.critical(self, "错误", f"文件 {filename} 格式错误！")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"导入配置失败: {str(e)}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
