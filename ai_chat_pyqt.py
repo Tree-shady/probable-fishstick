@@ -38,8 +38,8 @@ class ApiCallThread(QThread):
                 "Content-Type": "application/json"
             }
             
-            # 更新对话历史
-            self.conversation_history.append({"role": "user", "content": self.message})
+            # 注意：用户消息已经在send_message方法中添加到了conversation_history
+            # 这里不需要再次添加，否则会导致消息重复
             
             data = {
                 "model": self.config["model"],
@@ -48,17 +48,24 @@ class ApiCallThread(QThread):
                 "max_tokens": self.config["max_tokens"]
             }
             
+            # 打印请求信息用于调试
+            print(f"API请求URL: {self.config['api_url']}")
+            print(f"API请求头: {headers}")
+            print(f"API请求数据: {json.dumps(data, ensure_ascii=False)}")
+            
             response = requests.post(
                 self.config["api_url"],
                 headers=headers,
                 json=data,
                 timeout=30
             )
-            response.raise_for_status()
             
-            # 打印原始响应内容用于调试
-            raw_response = response.text
-            print(f"API原始响应: {raw_response}")
+            # 打印响应信息用于调试
+            print(f"API响应状态码: {response.status_code}")
+            print(f"API响应头: {response.headers}")
+            print(f"API原始响应: {response.text}")
+            
+            response.raise_for_status()
             
             result = response.json()
             
@@ -380,8 +387,9 @@ class AIChatPyQt(QMainWindow):
     def __init__(self):
         super().__init__()
         self.config_file = 'config.json'
+        self.history_file = 'conversation_history.json'
         self.config = self.load_config()
-        self.conversation_history = []
+        self.conversation_history = self.load_history()
         
         # 初始化UI
         self.init_ui()
@@ -418,6 +426,53 @@ class AIChatPyQt(QMainWindow):
         with open(self.config_file, 'w', encoding='utf-8') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
     
+    def fix_history_roles(self, history):
+        """修正对话历史中的role值，确保符合API规范"""
+        fixed_history = []
+        for message in history:
+            if isinstance(message, dict):
+                # 确保消息有role和content字段
+                if "role" in message and "content" in message:
+                    # 根据OpenAI API规范，role应该是'user', 'assistant', 'system'之一
+                    role = message["role"]
+                    if role == "ai":
+                        role = "assistant"
+                    fixed_history.append({
+                        "role": role,
+                        "content": message["content"]
+                    })
+        return fixed_history
+    
+    def load_history(self):
+        """加载对话历史"""
+        if os.path.exists(self.history_file):
+            try:
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    history = json.load(f)
+                
+                # 修正对话历史中的role值，确保符合API规范
+                fixed_history = self.fix_history_roles(history)
+                
+                print(f"加载对话历史: {json.dumps(fixed_history, ensure_ascii=False, indent=2)}")
+                print(f"加载对话历史长度: {len(fixed_history)}条消息")
+                
+                return fixed_history
+            except json.JSONDecodeError:
+                print(f"警告: 对话历史文件 {self.history_file} 格式错误，已重置")
+                return []
+            except Exception as e:
+                print(f"警告: 加载对话历史失败: {str(e)}")
+                return []
+        return []
+    
+    def save_history_auto(self):
+        """自动保存对话历史"""
+        try:
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.conversation_history, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"警告: 自动保存对话历史失败: {str(e)}")
+    
     def show_splash(self):
         """显示启动动画"""
         self.splash = SplashScreen()
@@ -437,6 +492,9 @@ class AIChatPyQt(QMainWindow):
         self.setWindowOpacity(0.0)
         self.show()
         self.fade_in()
+        
+        # 加载历史记录到聊天窗口
+        self.load_history_to_chat()
     
     def fade_in(self):
         """主窗口淡入动画"""
@@ -491,6 +549,10 @@ class AIChatPyQt(QMainWindow):
         config_action = QAction("配置", self)
         config_action.triggered.connect(self.open_config_dialog)
         file_menu.addAction(config_action)
+        
+        new_conv_action = QAction("新对话", self)
+        new_conv_action.triggered.connect(self.new_conversation)
+        file_menu.addAction(new_conv_action)
         
         clear_action = QAction("清空历史", self)
         clear_action.triggered.connect(self.clear_history)
@@ -567,6 +629,11 @@ class AIChatPyQt(QMainWindow):
         self.clear_button = QPushButton("清空")
         self.clear_button.clicked.connect(self.clear_history)
         button_layout.addWidget(self.clear_button)
+        
+        # 新对话按钮
+        self.new_conv_button = QPushButton("新对话")
+        self.new_conv_button.clicked.connect(self.new_conversation)
+        button_layout.addWidget(self.new_conv_button)
     
     def eventFilter(self, obj, event):
         """事件过滤器，处理输入框的按键事件"""
@@ -595,6 +662,8 @@ class AIChatPyQt(QMainWindow):
         
         # 更新对话历史
         self.conversation_history.append({"role": "user", "content": message})
+        # 自动保存对话历史
+        self.save_history_auto()
         
         # 禁用发送按钮
         self.send_button.setEnabled(False)
@@ -607,10 +676,42 @@ class AIChatPyQt(QMainWindow):
         self.api_thread.finished.connect(self.on_api_thread_finished)
         self.api_thread.start()
     
+    def new_conversation(self):
+        """开始新对话"""
+        response = QMessageBox.question(
+            self, "确认", "确定要开始新对话吗？当前对话历史将被保存并重置。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if response == QMessageBox.StandardButton.Yes:
+            # 保存当前历史
+            self.save_history_auto()
+            # 清空对话历史
+            self.conversation_history = []
+            # 清空聊天窗口
+            self.chat_history.clear()
+            # 清空历史文件
+            if os.path.exists(self.history_file):
+                os.remove(self.history_file)
+            self.status_bar.showMessage("已开始新对话")
+    
     def on_response_received(self, sender, message):
         """处理API响应"""
         self.add_message_to_history(sender, message)
-        self.conversation_history.append({"role": sender.lower(), "content": message})
+        
+        # 根据OpenAI API规范，role应该是'user', 'assistant', 'system'之一
+        # 修正role值，确保符合API规范
+        role = sender.lower()
+        if role == "ai":
+            role = "assistant"
+        
+        self.conversation_history.append({"role": role, "content": message})
+        
+        # 打印对话历史用于调试
+        print(f"当前对话历史: {json.dumps(self.conversation_history, ensure_ascii=False, indent=2)}")
+        print(f"当前对话历史长度: {len(self.conversation_history)}条消息")
+        
+        # 自动保存对话历史
+        self.save_history_auto()
     
     def on_error_occurred(self, error_message):
         """处理API错误"""
@@ -668,9 +769,21 @@ class AIChatPyQt(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if response == QMessageBox.StandardButton.Yes:
+            # 保存当前历史
+            self.save_history_auto()
             self.conversation_history = []
             self.chat_history.clear()
             self.status_bar.showMessage("对话历史已清空")
+    
+    def load_history_to_chat(self):
+        """将加载的历史记录显示到聊天窗口"""
+        if self.conversation_history:
+            self.chat_history.clear()
+            for message in self.conversation_history:
+                if message["role"] == "user":
+                    self.add_message_to_history("你", message["content"])
+                elif message["role"] == "assistant":
+                    self.add_message_to_history("AI", message["content"])
     
     def show_help(self):
         """显示帮助信息"""

@@ -9,8 +9,9 @@ import sys
 class AIChat:
     def __init__(self):
         self.config_file = 'config.json'
+        self.history_file = 'conversation_history.json'
         self.config = self.load_config()
-        self.conversation_history = []
+        self.conversation_history = self.load_history()
         
     def load_config(self):
         """加载配置文件"""
@@ -40,6 +41,52 @@ class AIChat:
         """保存配置文件"""
         with open(self.config_file, 'w', encoding='utf-8') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
+    
+    def fix_history_roles(self, history):
+        """修正对话历史中的role值，确保符合API规范"""
+        fixed_history = []
+        for message in history:
+            if isinstance(message, dict):
+                # 确保消息有role和content字段
+                if "role" in message and "content" in message:
+                    # 根据OpenAI API规范，role应该是'user', 'assistant', 'system'之一
+                    role = message["role"]
+                    if role == "ai":
+                        role = "assistant"
+                    fixed_history.append({
+                        "role": role,
+                        "content": message["content"]
+                    })
+        return fixed_history
+    
+    def load_history(self):
+        """加载对话历史"""
+        if os.path.exists(self.history_file):
+            try:
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    history = json.load(f)
+                
+                # 修正对话历史中的role值，确保符合API规范
+                fixed_history = self.fix_history_roles(history)
+                
+                print(f"\n已加载 {len(fixed_history)} 条对话历史")
+                print(f"加载的对话历史: {json.dumps(fixed_history, ensure_ascii=False, indent=2)}")
+                return fixed_history
+            except json.JSONDecodeError:
+                print(f"\n警告: 对话历史文件 {self.history_file} 格式错误，已重置")
+                return []
+            except Exception as e:
+                print(f"\n警告: 加载对话历史失败: {str(e)}")
+                return []
+        return []
+    
+    def save_history_auto(self):
+        """自动保存对话历史"""
+        try:
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.conversation_history, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"\n警告: 自动保存对话历史失败: {str(e)}")
     
     def update_config(self):
         """更新配置"""
@@ -80,8 +127,8 @@ class AIChat:
             "Content-Type": "application/json"
         }
         
-        # 更新对话历史
-        self.conversation_history.append({"role": "user", "content": message})
+        # 注意：用户消息已经在run方法中添加到了conversation_history
+        # 这里不需要再次添加，否则会导致消息重复
         
         data = {
             "model": self.config["model"],
@@ -106,6 +153,7 @@ class AIChat:
             result = response.json()
             
             # 检查是否为iflow.cn平台响应格式
+            assistant_message = None
             if isinstance(result, dict):
                 # 处理iflow.cn平台响应格式
                 if "status" in result and "msg" in result:
@@ -127,13 +175,11 @@ class AIChat:
                                                 assistant_message = choice["message"]["content"]
                                                 # 更新对话历史
                                                 self.conversation_history.append({"role": "assistant", "content": assistant_message})
-                                                return assistant_message
                             elif "content" in body:
                                 # 直接返回content内容
                                 assistant_message = body["content"]
                                 # 更新对话历史
                                 self.conversation_history.append({"role": "assistant", "content": assistant_message})
-                                return assistant_message
                     
                     # 处理错误响应
                     return f"API请求失败: {msg}"
@@ -148,7 +194,6 @@ class AIChat:
                                 assistant_message = message["content"]
                                 # 更新对话历史
                                 self.conversation_history.append({"role": "assistant", "content": assistant_message})
-                                return assistant_message
                 
                 # 处理其他可能的响应格式
                 elif "content" in result:
@@ -156,7 +201,19 @@ class AIChat:
                     assistant_message = result["content"]
                     # 更新对话历史
                     self.conversation_history.append({"role": "assistant", "content": assistant_message})
-                    return assistant_message
+            
+            if assistant_message:
+                # 检查并修正role值，确保符合API规范
+                # 注意：用户消息的role已经在run方法中正确设置为'user'
+                # 这里只需要确保assistant消息的role正确
+                
+                # 打印对话历史用于调试
+                print(f"当前对话历史: {json.dumps(self.conversation_history, ensure_ascii=False, indent=2)}")
+                print(f"当前对话历史长度: {len(self.conversation_history)}条消息")
+                
+                # 自动保存对话历史
+                self.save_history_auto()
+                return assistant_message
             
             # 响应格式不符合预期，提供更详细的错误信息
             return f"API返回格式异常。原始响应: {raw_response[:200]}...请检查配置和网络连接。"
@@ -168,8 +225,25 @@ class AIChat:
     
     def clear_history(self):
         """清空对话历史"""
+        # 保存当前历史
+        self.save_history_auto()
         self.conversation_history = []
         print("\n对话历史已清空！")
+    
+    def new_conversation(self):
+        """开始新对话"""
+        confirm = input("\n确定要开始新对话吗？当前对话历史将被保存并重置 (y/n): ").strip().lower()
+        if confirm == "y" or confirm == "yes":
+            # 保存当前历史
+            self.save_history_auto()
+            # 清空对话历史
+            self.conversation_history = []
+            # 清空历史文件
+            if os.path.exists(self.history_file):
+                os.remove(self.history_file)
+            print("\n已开始新对话！")
+        else:
+            print("\n取消开始新对话。")
     
     def save_history(self):
         """保存对话历史到文件"""
@@ -228,6 +302,7 @@ class AIChat:
         print("\n=== 命令帮助 ===")
         print("/config    - 更新API配置")
         print("/clear     - 清空对话历史")
+        print("/new       - 开始新对话")
         print("/save      - 保存对话历史到文件")
         print("/export    - 导出配置到文件")
         print("/import    - 从文件导入配置")
@@ -257,6 +332,8 @@ class AIChat:
                         self.update_config()
                     elif command == "/clear":
                         self.clear_history()
+                    elif command == "/new":
+                        self.new_conversation()
                     elif command == "/save":
                         self.save_history()
                     elif command == "/export":
@@ -266,11 +343,17 @@ class AIChat:
                     elif command == "/help":
                         self.show_help()
                     elif command == "/exit":
+                        # 保存当前历史
+                        self.save_history_auto()
                         print("\n再见！")
                         break
                     else:
                         print(f"未知命令: {user_input}，输入 /help 查看帮助")
                 else:
+                    # 更新对话历史
+                    self.conversation_history.append({"role": "user", "content": user_input})
+                    # 自动保存对话历史
+                    self.save_history_auto()
                     # 调用API获取回复
                     print("AI: ", end="", flush=True)
                     response = self.call_api(user_input)
