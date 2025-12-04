@@ -620,7 +620,7 @@ class AIChatPyQt(QMainWindow):
         file_menu.addAction(exit_action)
         
         # 预设菜单
-        preset_menu = QMenu("预设与模板", self)
+        preset_menu = QMenu("预设", self)
         menubar.addMenu(preset_menu)
         
         # 角色预设子菜单
@@ -629,13 +629,6 @@ class AIChatPyQt(QMainWindow):
         
         # 填充角色预设选项
         self.populate_prompt_menu(prompt_menu)
-        
-        # 对话模板子菜单
-        template_menu = QMenu("对话模板", self)
-        preset_menu.addMenu(template_menu)
-        
-        # 填充对话模板选项
-        self.populate_template_menu(template_menu)
         
         # 帮助菜单
         help_menu = QMenu("帮助", self)
@@ -981,14 +974,12 @@ class AIChatPyQt(QMainWindow):
 2. 发送消息：在输入框中输入消息，按Enter发送
 3. 换行：按Shift+Enter换行
 4. 清空历史：点击"清空"按钮或菜单"文件"->"清空历史"
-5. 角色预设：点击菜单"预设与模板"->"角色预设"，选择一个角色
-6. 对话模板：点击菜单"预设与模板"->"对话模板"，选择一个模板并填充占位符
+5. 角色预设：点击菜单"预设"->"角色预设"，选择一个角色
 
 支持的命令：
 - 直接输入消息发送给AI
 - 配置API URL、API密钥、模型等参数
 - 使用角色预设切换AI身份
-- 使用对话模板快速开始特定场景对话
 
 注意事项：
 - 请妥善保管API密钥
@@ -1060,21 +1051,6 @@ class AIChatPyQt(QMainWindow):
             action.triggered.connect(lambda checked=False, pid=prompt_id: self.on_prompt_selected(pid))
             menu.addAction(action)
     
-    def populate_template_menu(self, menu):
-        """填充对话模板菜单"""
-        # 清空现有菜单项
-        menu.clear()
-        
-        # 获取所有对话模板
-        templates = self.preset_manager.get_templates()
-        
-        # 添加菜单项
-        for template_id, template_info in templates.items():
-            action = QAction(template_info["name"], self)
-            action.setToolTip(template_info["description"])
-            action.triggered.connect(lambda checked=False, tid=template_id: self.on_template_selected(tid))
-            menu.addAction(action)
-    
     def on_prompt_selected(self, prompt_id):
         """处理角色预设选择"""
         prompt = self.preset_manager.get_prompt_by_id(prompt_id)
@@ -1101,81 +1077,6 @@ class AIChatPyQt(QMainWindow):
             
             # 自动保存对话历史
             self.save_history_auto()
-    
-    def on_template_selected(self, template_id):
-        """处理对话模板选择"""
-        template = self.preset_manager.get_template_by_id(template_id)
-        if not template:
-            return
-        
-        # 解析模板中的占位符
-        import re
-        placeholders = re.findall(r'\{(\w+)\}', template["template"])
-        
-        if not placeholders:
-            # 没有占位符，直接使用模板
-            self.input_text.setPlainText(template["template"])
-            return
-        
-        # 创建模板填充对话框
-        from PyQt6.QtWidgets import QDialog, QLabel, QLineEdit, QGridLayout, QPushButton, QHBoxLayout
-        
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"填充模板：{template['name']}")
-        dialog.setFixedSize(400, 250)
-        
-        layout = QVBoxLayout(dialog)
-        
-        # 模板描述
-        desc_label = QLabel(template["description"])
-        desc_label.setWordWrap(True)
-        layout.addWidget(desc_label)
-        layout.addSpacing(10)
-        
-        # 占位符输入网格
-        grid_layout = QGridLayout()
-        layout.addLayout(grid_layout)
-        
-        # 存储输入框
-        inputs = {}
-        
-        for i, placeholder in enumerate(placeholders):
-            # 标签
-            label = QLabel(f"{placeholder}：")
-            grid_layout.addWidget(label, i, 0, 1, 1, Qt.AlignmentFlag.AlignRight)
-            
-            # 输入框
-            input_field = QLineEdit()
-            grid_layout.addWidget(input_field, i, 1, 1, 3)
-            inputs[placeholder] = input_field
-        
-        # 按钮布局
-        button_layout = QHBoxLayout()
-        layout.addLayout(button_layout)
-        
-        # 确定按钮
-        ok_button = QPushButton("确定")
-        ok_button.clicked.connect(dialog.accept)
-        button_layout.addWidget(ok_button, alignment=Qt.AlignmentFlag.AlignRight)
-        
-        # 取消按钮
-        cancel_button = QPushButton("取消")
-        cancel_button.clicked.connect(dialog.reject)
-        button_layout.addWidget(cancel_button, alignment=Qt.AlignmentFlag.AlignRight)
-        button_layout.addSpacing(10)
-        
-        # 显示对话框
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            # 获取输入值
-            params = {}
-            for placeholder, input_field in inputs.items():
-                params[placeholder] = input_field.text().strip()
-            
-            # 填充模板
-            filled_template = self.preset_manager.fill_template(template_id, **params)
-            
-            # 将填充后的模板放入输入框
-            self.input_text.setPlainText(filled_template)
     
     def import_config(self):
         """从文件导入配置"""
