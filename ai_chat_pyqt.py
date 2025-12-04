@@ -12,8 +12,12 @@ from PyQt6.QtGui import QFont, QColor, QTextCursor, QIcon, QAction
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTextEdit, QPushButton, QMenuBar, QMenu, QStatusBar,
-    QDialog, QLabel, QLineEdit, QGridLayout, QMessageBox, QProgressBar
+    QDialog, QLabel, QLineEdit, QGridLayout, QMessageBox, QProgressBar,
+    QInputDialog, QListWidget, QSplitter, QTabWidget
 )
+
+# 导入对话管理模块
+from conversation_manager import ConversationManager
 
 class ApiCallThread(QThread):
     """异步API调用线程"""
@@ -387,15 +391,53 @@ class AIChatPyQt(QMainWindow):
     def __init__(self):
         super().__init__()
         self.config_file = 'config.json'
-        self.history_file = 'conversation_history.json'
         self.config = self.load_config()
-        self.conversation_history = self.load_history()
+        
+        # 初始化对话管理器
+        self.conversation_manager = ConversationManager()
+        self.current_conversation_id = None
+        self.message_counter = 0  # 用于生成消息ID
+        
+        # 创建或加载当前对话
+        self._init_current_conversation()
         
         # 初始化UI
         self.init_ui()
         
         # 显示启动动画
         self.show_splash()
+        
+    def _init_current_conversation(self):
+        """初始化当前对话"""
+        # 获取最近的对话
+        conversations = self.conversation_manager.get_conversations()
+        if conversations:
+            # 使用最近的对话
+            latest_conv = conversations[0]
+            self.current_conversation_id = latest_conv["id"]
+            self.conversation_history = self.conversation_manager.load_conversation(self.current_conversation_id)
+        else:
+            # 创建新对话
+            self.current_conversation_id = self.conversation_manager.create_conversation()
+            self.conversation_history = []
+        
+        # 初始化消息ID
+        self._init_message_ids()
+        
+    def _init_message_ids(self):
+        """为现有对话历史添加消息ID"""
+        for i, message in enumerate(self.conversation_history):
+            if "id" not in message:
+                message["id"] = f"msg_{self.message_counter}"
+                self.message_counter += 1
+    
+    def save_history_auto(self):
+        """自动保存对话历史"""
+        if self.current_conversation_id:
+            self.conversation_manager.update_conversation(
+                self.current_conversation_id, 
+                self.conversation_history
+            )
     
     def load_config(self):
         """加载配置文件"""
@@ -426,52 +468,14 @@ class AIChatPyQt(QMainWindow):
         with open(self.config_file, 'w', encoding='utf-8') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
     
-    def fix_history_roles(self, history):
-        """修正对话历史中的role值，确保符合API规范"""
-        fixed_history = []
-        for message in history:
-            if isinstance(message, dict):
-                # 确保消息有role和content字段
-                if "role" in message and "content" in message:
-                    # 根据OpenAI API规范，role应该是'user', 'assistant', 'system'之一
-                    role = message["role"]
-                    if role == "ai":
-                        role = "assistant"
-                    fixed_history.append({
-                        "role": role,
-                        "content": message["content"]
-                    })
-        return fixed_history
-    
-    def load_history(self):
-        """加载对话历史"""
-        if os.path.exists(self.history_file):
-            try:
-                with open(self.history_file, 'r', encoding='utf-8') as f:
-                    history = json.load(f)
-                
-                # 修正对话历史中的role值，确保符合API规范
-                fixed_history = self.fix_history_roles(history)
-                
-                print(f"加载对话历史: {json.dumps(fixed_history, ensure_ascii=False, indent=2)}")
-                print(f"加载对话历史长度: {len(fixed_history)}条消息")
-                
-                return fixed_history
-            except json.JSONDecodeError:
-                print(f"警告: 对话历史文件 {self.history_file} 格式错误，已重置")
-                return []
-            except Exception as e:
-                print(f"警告: 加载对话历史失败: {str(e)}")
-                return []
-        return []
-    
     def save_history_auto(self):
         """自动保存对话历史"""
-        try:
-            with open(self.history_file, 'w', encoding='utf-8') as f:
-                json.dump(self.conversation_history, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"警告: 自动保存对话历史失败: {str(e)}")
+        if self.current_conversation_id:
+            self.conversation_manager.update_conversation(
+                self.current_conversation_id, 
+                self.conversation_history
+            )
+            print(f"已保存对话到ID: {self.current_conversation_id}")
     
     def show_splash(self):
         """显示启动动画"""
@@ -558,6 +562,36 @@ class AIChatPyQt(QMainWindow):
         clear_action.triggered.connect(self.clear_history)
         file_menu.addAction(clear_action)
         
+        file_menu.addSeparator()
+        
+        # 对话菜单
+        chat_menu = QMenu("对话", self)
+        menubar.addMenu(chat_menu)
+        
+        regenerate_action = QAction("重新生成回答", self)
+        regenerate_action.triggered.connect(self.regenerate_response)
+        chat_menu.addAction(regenerate_action)
+        
+        # 编辑消息功能将在后续实现，需要选择要编辑的消息
+        # edit_action = QAction("编辑消息", self)
+        # edit_action.triggered.connect(self.edit_selected_message)
+        # chat_menu.addAction(edit_action)
+        
+        chat_menu.addSeparator()
+        
+        # 分支对话功能
+        branch_menu = QMenu("分支对话", self)
+        chat_menu.addMenu(branch_menu)
+        
+        new_branch_action = QAction("创建分支", self)
+        new_branch_action.triggered.connect(self.create_new_branch)
+        branch_menu.addAction(new_branch_action)
+        
+        # 切换分支功能将在后续实现，需要选择分支
+        # switch_branch_action = QAction("切换分支", self)
+        # switch_branch_action.triggered.connect(self.switch_branch_dialog)
+        # branch_menu.addAction(switch_branch_action)
+        
         # 添加新功能菜单
         file_menu.addSeparator()
         
@@ -625,6 +659,11 @@ class AIChatPyQt(QMainWindow):
         self.send_button.clicked.connect(self.send_message)
         button_layout.addWidget(self.send_button)
         
+        # 重新生成按钮
+        self.regenerate_button = QPushButton("重新生成")
+        self.regenerate_button.clicked.connect(self.regenerate_response)
+        button_layout.addWidget(self.regenerate_button)
+        
         # 清空按钮
         self.clear_button = QPushButton("清空")
         self.clear_button.clicked.connect(self.clear_history)
@@ -660,8 +699,17 @@ class AIChatPyQt(QMainWindow):
         # 显示用户消息
         self.add_message_to_history("你", message)
         
+        # 为新消息生成唯一ID
+        message_id = f"msg_{self.message_counter}"
+        self.message_counter += 1
+        
         # 更新对话历史
-        self.conversation_history.append({"role": "user", "content": message})
+        self.conversation_history.append({
+            "id": message_id,
+            "role": "user", 
+            "content": message
+        })
+        
         # 自动保存对话历史
         self.save_history_auto()
         
@@ -679,19 +727,22 @@ class AIChatPyQt(QMainWindow):
     def new_conversation(self):
         """开始新对话"""
         response = QMessageBox.question(
-            self, "确认", "确定要开始新对话吗？当前对话历史将被保存并重置。",
+            self, "确认", "确定要开始新对话吗？当前对话历史将被保存。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if response == QMessageBox.StandardButton.Yes:
-            # 保存当前历史
-            self.save_history_auto()
-            # 清空对话历史
+            # 保存当前对话
+            if self.current_conversation_id:
+                self.save_history_auto()
+            
+            # 创建新对话
+            self.current_conversation_id = self.conversation_manager.create_conversation()
             self.conversation_history = []
+            self.message_counter = 0
+            
             # 清空聊天窗口
             self.chat_history.clear()
-            # 清空历史文件
-            if os.path.exists(self.history_file):
-                os.remove(self.history_file)
+            
             self.status_bar.showMessage("已开始新对话")
     
     def on_response_received(self, sender, message):
@@ -704,7 +755,16 @@ class AIChatPyQt(QMainWindow):
         if role == "ai":
             role = "assistant"
         
-        self.conversation_history.append({"role": role, "content": message})
+        # 为新消息生成唯一ID
+        message_id = f"msg_{self.message_counter}"
+        self.message_counter += 1
+        
+        # 添加到对话历史
+        self.conversation_history.append({
+            "id": message_id,
+            "role": role,
+            "content": message
+        })
         
         # 打印对话历史用于调试
         print(f"当前对话历史: {json.dumps(self.conversation_history, ensure_ascii=False, indent=2)}")
@@ -712,6 +772,108 @@ class AIChatPyQt(QMainWindow):
         
         # 自动保存对话历史
         self.save_history_auto()
+        
+    def regenerate_response(self):
+        """重新生成上一条AI回答"""
+        if not self.conversation_history:
+            QMessageBox.information(self, "提示", "没有对话历史，无法重新生成回答。")
+            return
+        
+        # 检查最后一条消息是否是AI回复
+        last_message = self.conversation_history[-1]
+        if last_message["role"] != "assistant":
+            QMessageBox.information(self, "提示", "最后一条消息不是AI回复，无法重新生成。")
+            return
+        
+        # 移除最后一条AI回复
+        self.conversation_history.pop()
+        
+        # 清空聊天窗口并重新加载历史
+        self.chat_history.clear()
+        self.load_history_to_chat()
+        
+        # 重新发送上一条用户消息
+        user_message = self.conversation_history[-1]
+        self.input_text.setPlainText(user_message["content"])
+        self.send_message()
+        
+    def edit_message(self, message_id, new_content):
+        """编辑指定ID的消息"""
+        # 查找消息
+        for i, message in enumerate(self.conversation_history):
+            if message["id"] == message_id:
+                # 更新消息内容
+                self.conversation_history[i]["content"] = new_content
+                
+                # 移除该消息之后的所有消息
+                self.conversation_history = self.conversation_history[:i+1]
+                
+                # 清空聊天窗口并重新加载历史
+                self.chat_history.clear()
+                self.load_history_to_chat()
+                
+                # 如果是用户消息，将新内容放入输入框
+                if message["role"] == "user":
+                    self.input_text.setPlainText(new_content)
+                
+                return True
+        return False
+        
+    def create_branch(self, branch_name, from_message_id=None):
+        """创建对话分支"""
+        if not branch_name:
+            QMessageBox.warning(self, "错误", "分支名称不能为空。")
+            return False
+        
+        if branch_name in self.conversation_branches:
+            QMessageBox.warning(self, "错误", "分支名称已存在。")
+            return False
+        
+        # 确定分支起始位置
+        if from_message_id:
+            # 从指定消息开始分支
+            branch_start = 0
+            for i, message in enumerate(self.conversation_history):
+                if message["id"] == from_message_id:
+                    branch_start = i + 1
+                    break
+            branch_history = self.conversation_history[:branch_start]
+        else:
+            # 从当前位置开始分支
+            branch_history = self.conversation_history.copy()
+        
+        # 保存当前分支
+        self.conversation_branches[branch_name] = branch_history.copy()
+        
+        QMessageBox.information(self, "成功", f"分支 '{branch_name}' 创建成功！")
+        return True
+        
+    def create_new_branch(self):
+        """创建新分支的对话框"""
+        from PyQt6.QtWidgets import QInputDialog
+        
+        branch_name, ok = QInputDialog.getText(self, "创建分支", "请输入分支名称:")
+        if ok and branch_name.strip():
+            self.create_branch(branch_name.strip())
+        
+    def switch_branch(self, branch_name):
+        """切换到指定分支"""
+        if branch_name not in self.conversation_branches:
+            QMessageBox.warning(self, "错误", "分支不存在。")
+            return False
+        
+        # 保存当前分支
+        self.conversation_branches[self.current_branch] = self.conversation_history.copy()
+        
+        # 切换到新分支
+        self.conversation_history = self.conversation_branches[branch_name].copy()
+        self.current_branch = branch_name
+        
+        # 更新聊天窗口
+        self.chat_history.clear()
+        self.load_history_to_chat()
+        
+        return True
     
     def on_error_occurred(self, error_message):
         """处理API错误"""
