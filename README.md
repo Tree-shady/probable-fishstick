@@ -56,11 +56,11 @@ AI对话软件是一个功能强大、灵活易用的Python对话工具，支持
 
 2. 克隆或下载项目代码
    - 直接下载：点击GitHub页面的"Code"按钮，选择"Download ZIP"
-   - 克隆代码：`git clone https://github.com/yourusername/ai-chat-software.git`
+   - 克隆代码：`git clone https://github.com/Tree-shady/probable-fishstick.git`
 
 3. 进入项目目录
    ```bash
-   cd ai-chat-software
+   cd probable-fishstick
    ```
 
 4. 安装所需依赖：
@@ -263,7 +263,7 @@ model: deepseek-v3.1
    - 注意不同平台的API Token有效期可能不同
 
 4. **图形界面无法启动**
-   - 检查PyQt6或tkinter是否正确安装
+   - 检查PyQt6是否正确安装
    - 尝试使用命令行版本
    - 查看控制台输出的错误信息
 
@@ -296,7 +296,7 @@ ai-chat-software/
 ├── conversations/       # 对话历史存储文件夹
 └── presets/             # 预设和模板存储文件夹
     ├── prompts.json     # 角色预设文件
-    └── templates.json   # 对话模板文件
+    └── templates.json   # 对话模板文件（文件已删除）
 ```
 
 ### 代码结构

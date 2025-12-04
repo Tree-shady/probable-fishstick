@@ -20,6 +20,9 @@ from PyQt6.QtWidgets import (
 from conversation_manager import ConversationManager
 # 导入预设管理模块
 from preset_manager import PresetManager
+# 导入审计日志相关模块
+import os
+import datetime
 
 class ApiCallThread(QThread):
     """异步API调用线程"""
@@ -143,109 +146,7 @@ class ApiCallThread(QThread):
                     return
             
             # 响应格式不符合预期，提供更详细的错误信息
-            error_msg = f"API返回格式异常。原始响应: {raw_response[:200]}..."
-            self.error_occurred.emit(error_msg)
-            self.status_changed.emit("错误")
-                
-        except requests.exceptions.RequestException as e:
-            self.error_occurred.emit(f"API调用失败: {str(e)}")
-            self.status_changed.emit("错误")
-        except json.JSONDecodeError:
-            self.error_occurred.emit("API返回格式错误，无法解析。")
-            self.status_changed.emit("错误")
-        except Exception as e:
-            self.error_occurred.emit(f"意外错误: {str(e)}")
-            self.status_changed.emit("错误")
-            self.status_changed.emit("正在请求...")
-            
-            # 准备请求数据
-            headers = {
-                "Authorization": f"Bearer {self.config['api_key']}",
-                "Content-Type": "application/json"
-            }
-            
-            # 更新对话历史
-            self.conversation_history.append({"role": "user", "content": self.message})
-            
-            data = {
-                "model": self.config["model"],
-                "messages": self.conversation_history,
-                "temperature": self.config["temperature"],
-                "max_tokens": self.config["max_tokens"]
-            }
-            
-            response = requests.post(
-                self.config["api_url"],
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            # 打印原始响应内容用于调试
-            raw_response = response.text
-            print(f"API原始响应: {raw_response}")
-            
-            result = response.json()
-            
-            # 检查是否为iflow.cn平台响应格式
-            if isinstance(result, dict):
-                # 处理iflow.cn平台响应格式
-                if "status" in result and "msg" in result:
-                    status = result["status"]
-                    msg = result["msg"]
-                    
-                    if status == "0" or status == 0:
-                        # 成功响应，检查body字段
-                        if "body" in result and isinstance(result["body"], dict):
-                            body = result["body"]
-                            # 检查是否包含choices或content字段
-                            if "choices" in body:
-                                choices = body["choices"]
-                                if isinstance(choices, list) and len(choices) > 0:
-                                    choice = choices[0]
-                                    if isinstance(choice, dict):
-                                        if "message" in choice and isinstance(choice["message"], dict):
-                                            if "content" in choice["message"]:
-                                                assistant_message = choice["message"]["content"]
-                                                self.response_received.emit("AI", assistant_message)
-                                                self.status_changed.emit("就绪")
-                                                return
-                            elif "content" in body:
-                                # 直接返回content内容
-                                assistant_message = body["content"]
-                                self.response_received.emit("AI", assistant_message)
-                                self.status_changed.emit("就绪")
-                                return
-                    
-                    # 处理错误响应
-                    error_msg = f"API请求失败: {msg}"
-                    self.error_occurred.emit(error_msg)
-                    self.status_changed.emit("错误")
-                    return
-                
-                # 处理OpenAI API响应格式
-                elif "choices" in result:
-                    if isinstance(result["choices"], list) and len(result["choices"]) > 0:
-                        choice = result["choices"][0]
-                        if isinstance(choice, dict) and "message" in choice:
-                            message = choice["message"]
-                            if isinstance(message, dict) and "content" in message:
-                                assistant_message = message["content"]
-                                self.response_received.emit("AI", assistant_message)
-                                self.status_changed.emit("就绪")
-                                return
-                
-                # 处理其他可能的响应格式
-                elif "content" in result:
-                    # 直接返回content内容
-                    assistant_message = result["content"]
-                    self.response_received.emit("AI", assistant_message)
-                    self.status_changed.emit("就绪")
-                    return
-            
-            # 响应格式不符合预期，提供更详细的错误信息
-            error_msg = f"API返回格式异常。原始响应: {raw_response[:200]}..."
+            error_msg = f"API返回格式异常。"
             self.error_occurred.emit(error_msg)
             self.status_changed.emit("错误")
                 
@@ -415,6 +316,26 @@ class AIChatPyQt(QMainWindow):
         self.preset_manager = PresetManager()
         self.current_prompt = None  # 当前使用的角色预设
         
+        # 初始化审计日志
+        self._init_audit_log()
+        
+        # 初始化动态人格与情绪模拟
+        self.emotions = [
+            {"id": "neutral", "name": "中性", "description": "保持中立，客观回答"},
+            {"id": "excited", "name": "兴奋", "description": "充满活力，积极热情"},
+            {"id": "sympathetic", "name": "同情", "description": "表达理解，温暖关怀"},
+            {"id": "curious", "name": "好奇", "description": "充满好奇，积极探索"},
+            {"id": "humorous", "name": "幽默", "description": "风趣幽默，轻松愉快"}
+        ]
+        self.current_emotion = "neutral"  # 默认情绪
+        self.emotion_modifiers = {
+            "neutral": "保持中立的语气，客观回答问题。",
+            "excited": "使用充满活力、积极热情的语气，表达兴奋情绪。",
+            "sympathetic": "表达理解和温暖关怀，使用同情的语气。",
+            "curious": "表达好奇心，使用探索性的语气，鼓励进一步讨论。",
+            "humorous": "使用风趣幽默的语气，保持轻松愉快的氛围。"
+        }
+        
         # 创建或加载当前对话
         self._init_current_conversation()
         
@@ -447,6 +368,19 @@ class AIChatPyQt(QMainWindow):
             if "id" not in message:
                 message["id"] = f"msg_{self.message_counter}"
                 self.message_counter += 1
+    
+    def _init_audit_log(self):
+        """初始化审计日志"""
+        # 创建logs目录
+        self.logs_dir = "logs"
+        if not os.path.exists(self.logs_dir):
+            os.makedirs(self.logs_dir)
+        
+        # 创建审计日志文件
+        self.audit_log_file = os.path.join(self.logs_dir, f"audit_{datetime.date.today().strftime('%Y%m%d')}.log")
+        
+        # 记录启动日志
+        self.write_audit_log("系统", "启动", "AI对话软件启动成功")
     
     def save_history_auto(self):
         """自动保存对话历史"""
@@ -502,6 +436,15 @@ class AIChatPyQt(QMainWindow):
         
         # 模拟加载延迟
         QTimer.singleShot(2000, self.splash.start_fade_out)
+    
+    def write_audit_log(self, actor, action, details):
+        """写入审计日志"""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"[{timestamp}] 执行者: {actor} | 操作: {action} | 详情: {details}\n"
+        
+        # 写入日志文件
+        with open(self.audit_log_file, "a", encoding="utf-8") as f:
+            f.write(log_entry)
     
     def on_splash_ended(self):
         """启动动画结束后处理"""
@@ -641,6 +584,18 @@ class AIChatPyQt(QMainWindow):
         # 填充角色预设选项
         self.populate_prompt_menu(prompt_menu)
         
+        # 情绪选择子菜单
+        emotion_menu = QMenu("情绪选择", self)
+        preset_menu.addMenu(emotion_menu)
+        
+        # 填充情绪选择选项
+        self.populate_emotion_menu(emotion_menu)
+        
+        # 风格模仿选项
+        style_action = QAction("风格模仿", self)
+        style_action.triggered.connect(self.show_style_imitation_dialog)
+        preset_menu.addAction(style_action)
+        
         # 帮助菜单
         help_menu = QMenu("帮助", self)
         menubar.addMenu(help_menu)
@@ -708,6 +663,25 @@ class AIChatPyQt(QMainWindow):
         self.regenerate_button.clicked.connect(self.regenerate_response)
         button_layout.addWidget(self.regenerate_button)
         
+        # 反馈按钮区域
+        feedback_layout = QHBoxLayout()
+        button_layout.addLayout(feedback_layout)
+        feedback_layout.setSpacing(5)
+        
+        # 点赞按钮
+        self.like_button = QPushButton("👍")
+        self.like_button.setFixedSize(40, 25)
+        self.like_button.clicked.connect(self.on_like)
+        self.like_button.setEnabled(False)  # 默认禁用
+        feedback_layout.addWidget(self.like_button)
+        
+        # 点踩按钮
+        self.dislike_button = QPushButton("👎")
+        self.dislike_button.setFixedSize(40, 25)
+        self.dislike_button.clicked.connect(self.on_dislike)
+        self.dislike_button.setEnabled(False)  # 默认禁用
+        feedback_layout.addWidget(self.dislike_button)
+        
         # 清空按钮
         self.clear_button = QPushButton("清空")
         self.clear_button.clicked.connect(self.clear_history)
@@ -757,6 +731,9 @@ class AIChatPyQt(QMainWindow):
         # 自动保存对话历史
         self.save_history_auto()
         
+        # 记录审计日志
+        self.write_audit_log("用户", "发送消息", f"消息内容: {message[:50]}...")
+        
         # 禁用发送按钮
         self.send_button.setEnabled(False)
         
@@ -787,6 +764,9 @@ class AIChatPyQt(QMainWindow):
             
             # 清空聊天窗口
             self.chat_history.clear()
+            
+            # 记录审计日志
+            self.write_audit_log("用户", "开始新对话", f"新对话ID: {self.current_conversation_id}")
             
             self.status_bar.showMessage("已开始新对话")
     
@@ -836,6 +816,9 @@ class AIChatPyQt(QMainWindow):
         # 清空聊天窗口并重新加载历史
         self.chat_history.clear()
         self.load_history_to_chat()
+        
+        # 记录审计日志
+        self.write_audit_log("用户", "重新生成回答", "重新生成上一条AI回复")
         
         # 重新发送上一条用户消息
         user_message = self.conversation_history[-1]
@@ -931,7 +914,7 @@ class AIChatPyQt(QMainWindow):
     def add_message_to_history(self, sender, message):
         """添加消息到对话历史"""
         # 添加发送者和时间
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # 设置不同发送者的颜色
         if sender == "你":
@@ -951,11 +934,16 @@ class AIChatPyQt(QMainWindow):
         
         # 滚动到底部
         self.chat_history.ensureCursorVisible()
+        
+        # 如果是AI消息，启用反馈按钮
+        if sender == "AI":
+            self.like_button.setEnabled(True)
+            self.dislike_button.setEnabled(True)
     
     def add_debug_info(self, message):
         """添加调试信息到左侧调试区域"""
         # 添加时间戳
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # 插入调试信息
         self.debug_info.moveCursor(QTextCursor.MoveOperation.End)
@@ -993,6 +981,10 @@ class AIChatPyQt(QMainWindow):
             self.save_history_auto()
             self.conversation_history = []
             self.chat_history.clear()
+            
+            # 记录审计日志
+            self.write_audit_log("用户", "清空历史", "清空当前对话历史")
+            
             self.status_bar.showMessage("对话历史已清空")
     
     def load_history_to_chat(self):
@@ -1100,7 +1092,7 @@ class AIChatPyQt(QMainWindow):
             system_message = {
                 "id": f"msg_{self.message_counter}",
                 "role": "system",
-                "content": prompt["system_prompt"]
+                "content": f"{prompt['system_prompt']} {self.emotion_modifiers[self.current_emotion]}"
             }
             self.message_counter += 1
             
@@ -1114,10 +1106,203 @@ class AIChatPyQt(QMainWindow):
             self.chat_history.clear()
             
             # 添加预设信息到聊天窗口
-            self.add_message_to_history("系统", f"已切换到角色：{prompt['name']}\n描述：{prompt['description']}")
+            self.add_message_to_history("系统", f"已切换到角色：{prompt['name']}\n描述：{prompt['description']}\n当前情绪：{self._get_emotion_name(self.current_emotion)}")
             
             # 自动保存对话历史
             self.save_history_auto()
+            
+            # 记录审计日志
+            self.write_audit_log("用户", "切换角色预设", f"切换到角色：{prompt['name']}")
+    
+    def populate_emotion_menu(self, menu):
+        """填充情绪选择菜单"""
+        # 清空现有菜单项
+        menu.clear()
+        
+        # 添加菜单项
+        for emotion in self.emotions:
+            action = QAction(emotion["name"], self)
+            action.setToolTip(emotion["description"])
+            action.triggered.connect(lambda checked=False, eid=emotion["id"]: self.on_emotion_selected(eid))
+            menu.addAction(action)
+    
+    def _get_emotion_name(self, emotion_id):
+        """根据情绪ID获取情绪名称"""
+        for emotion in self.emotions:
+            if emotion["id"] == emotion_id:
+                return emotion["name"]
+        return "未知"
+    
+    def on_emotion_selected(self, emotion_id):
+        """处理情绪选择"""
+        if emotion_id not in self.emotion_modifiers:
+            return
+        
+        # 更新当前情绪
+        self.current_emotion = emotion_id
+        
+        # 获取当前情绪名称
+        emotion_name = self._get_emotion_name(emotion_id)
+        
+        # 更新对话历史中的系统消息
+        for i, message in enumerate(self.conversation_history):
+            if message["role"] == "system":
+                # 保留原有角色预设，添加新的情绪修饰
+                original_prompt = message["content"]
+                # 移除旧的情绪修饰
+                for modifier in self.emotion_modifiers.values():
+                    if modifier in original_prompt:
+                        original_prompt = original_prompt.replace(modifier, "")
+                # 添加新的情绪修饰
+                new_prompt = f"{original_prompt.strip()} {self.emotion_modifiers[emotion_id]}"
+                self.conversation_history[i]["content"] = new_prompt
+                break
+        
+        # 记录审计日志
+        self.write_audit_log("用户", "切换情绪", f"切换到情绪：{emotion_name}")
+        
+        # 添加情绪信息到聊天窗口
+        self.add_message_to_history("系统", f"已切换到情绪：{emotion_name}\n描述：{self._get_emotion_description(emotion_id)}")
+    
+    def _get_emotion_description(self, emotion_id):
+        """根据情绪ID获取情绪描述"""
+        for emotion in self.emotions:
+            if emotion["id"] == emotion_id:
+                return emotion["description"]
+        return "未知"
+    
+    def show_style_imitation_dialog(self):
+        """显示风格模仿对话框"""
+        # 创建风格模仿对话框
+        from PyQt6.QtWidgets import QDialog, QLabel, QTextEdit, QPushButton, QVBoxLayout, QHBoxLayout
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("风格模仿")
+        dialog.setFixedSize(500, 400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 提示标签
+        prompt_label = QLabel("请输入一段文本，AI将模仿其风格进行对话：")
+        prompt_label.setWordWrap(True)
+        layout.addWidget(prompt_label)
+        layout.addSpacing(10)
+        
+        # 文本输入框
+        self.style_text_edit = QTextEdit()
+        self.style_text_edit.setPlaceholderText("请输入要模仿的文本...")
+        layout.addWidget(self.style_text_edit)
+        layout.addSpacing(10)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        layout.addLayout(button_layout)
+        
+        # 确定按钮
+        ok_button = QPushButton("确定")
+        ok_button.clicked.connect(self.apply_style_imitation)
+        button_layout.addWidget(ok_button, alignment=Qt.AlignmentFlag.AlignRight)
+        
+        # 取消按钮
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_button, alignment=Qt.AlignmentFlag.AlignRight)
+        button_layout.addSpacing(10)
+        
+        # 显示对话框
+        dialog.exec()
+    
+    def apply_style_imitation(self):
+        """应用风格模仿"""
+        # 获取用户输入的风格文本
+        style_text = self.style_text_edit.toPlainText().strip()
+        if not style_text:
+            QMessageBox.warning(self, "警告", "请输入要模仿的文本！")
+            return
+        
+        # 更新对话历史中的系统消息
+        style_prompt = f"请模仿以下文本的风格进行对话：\n{style_text}\n"
+        
+        # 检查是否已有系统消息
+        system_message_exists = False
+        for i, message in enumerate(self.conversation_history):
+            if message["role"] == "system":
+                # 保留原有角色预设和情绪修饰，添加风格模仿提示
+                original_prompt = message["content"]
+                # 移除旧的风格模仿提示
+                if "请模仿以下文本的风格进行对话：" in original_prompt:
+                    original_prompt = original_prompt.split("请模仿以下文本的风格进行对话：")[0].strip()
+                # 添加新的风格模仿提示
+                new_prompt = f"{original_prompt} {style_prompt} {self.emotion_modifiers[self.current_emotion]}"
+                self.conversation_history[i]["content"] = new_prompt
+                system_message_exists = True
+                break
+        
+        # 如果没有系统消息，创建一个新的
+        if not system_message_exists:
+            system_message = {
+                "id": f"msg_{self.message_counter}",
+                "role": "system",
+                "content": f"{style_prompt} {self.emotion_modifiers[self.current_emotion]}"
+            }
+            self.message_counter += 1
+            self.conversation_history.insert(0, system_message)
+        
+        # 记录审计日志
+        self.write_audit_log("用户", "应用风格模仿", f"风格文本：{style_text[:50]}...")
+        
+        # 添加风格模仿信息到聊天窗口
+        self.add_message_to_history("系统", f"已应用风格模仿\n风格文本：{style_text[:100]}...")
+        
+        # 自动保存对话历史
+        self.save_history_auto()
+    
+    def on_like(self):
+        """处理用户点赞"""
+        # 记录审计日志
+        self.write_audit_log("用户", "点赞", "用户对AI回复表示满意")
+        
+        # 禁用反馈按钮
+        self.like_button.setEnabled(False)
+        self.dislike_button.setEnabled(False)
+        
+        # 显示感谢信息
+        self.add_message_to_history("系统", "感谢您的认可！我会继续努力的。")
+    
+    def on_dislike(self):
+        """处理用户点踩"""
+        # 记录审计日志
+        self.write_audit_log("用户", "点踩", "用户对AI回复表示不满意")
+        
+        # 禁用反馈按钮
+        self.like_button.setEnabled(False)
+        self.dislike_button.setEnabled(False)
+        
+        # 询问用户哪里不好
+        from PyQt6.QtWidgets import QInputDialog
+        feedback, ok = QInputDialog.getText(self, "反馈", "之前的回答哪里不好？")
+        
+        if ok and feedback.strip():
+            # 记录反馈信息
+            self.write_audit_log("用户", "反馈", f"用户反馈：{feedback}")
+            
+            # 更新对话历史中的系统消息，添加反馈信息
+            for i, message in enumerate(self.conversation_history):
+                if message["role"] == "system":
+                    # 添加反馈信息到系统提示
+                    feedback_prompt = f"\n\n用户反馈：{feedback}，请根据此反馈调整后续回答。"
+                    if feedback_prompt not in message["content"]:
+                        self.conversation_history[i]["content"] += feedback_prompt
+                    break
+            
+            # 显示感谢反馈信息
+            self.add_message_to_history("系统", f"感谢您的反馈：{feedback}\n我会根据您的反馈调整后续回答。")
+            
+            # 自动保存对话历史
+            self.save_history_auto()
+        else:
+            # 显示默认感谢信息
+            self.add_message_to_history("系统", "感谢您的反馈！我会继续改进的。")
     
     def import_config(self):
         """从文件导入配置"""
