@@ -336,6 +336,10 @@ class AIChatPyQt(QMainWindow):
             "humorous": "使用风趣幽默的语气，保持轻松愉快的氛围。"
         }
         
+        # 初始化思维可视化
+        self.mindmap_data = {}
+        self.mindmap_counter = 0
+        
         # 创建或加载当前对话
         self._init_current_conversation()
         
@@ -610,9 +614,9 @@ class AIChatPyQt(QMainWindow):
     
     def create_chat_history(self, layout):
         """创建对话历史区域"""
-        # 创建分割器，左侧显示调试信息，右侧显示对话历史
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        layout.addWidget(splitter, 1)
+        # 创建分割器，左侧显示调试信息，右侧显示对话历史和思维导图
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        layout.addWidget(main_splitter, 1)
         
         # 左侧调试信息区域
         self.debug_info = QTextEdit()
@@ -621,17 +625,47 @@ class AIChatPyQt(QMainWindow):
         self.debug_info.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.debug_info.setPlaceholderText("调试信息将显示在这里...")
         self.debug_info.setMinimumWidth(200)  # 进一步减小最小宽度
-        splitter.addWidget(self.debug_info)
+        main_splitter.addWidget(self.debug_info)
         
-        # 右侧对话历史区域
+        # 右侧容器，用于包含对话历史和思维导图
+        right_container = QWidget()
+        right_layout = QVBoxLayout(right_container)
+        main_splitter.addWidget(right_container)
+        
+        # 对话历史和思维导图垂直分割器
+        right_splitter = QSplitter(Qt.Orientation.Vertical)
+        right_layout.addWidget(right_splitter)
+        
+        # 上部分：对话历史区域
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
         self.chat_history.setFont(QFont("Arial", 12))
         self.chat_history.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        splitter.addWidget(self.chat_history)
+        right_splitter.addWidget(self.chat_history)
         
-        # 设置分割器初始比例，进一步减小调试信息区域宽度
-        splitter.setSizes([200, 600])
+        # 下部分：思维导图区域
+        self.mindmap_widget = QWidget()
+        self.mindmap_layout = QVBoxLayout(self.mindmap_widget)
+        self.mindmap_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 添加思维导图标题
+        self.mindmap_label = QLabel("思维可视化")
+        self.mindmap_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.mindmap_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        self.mindmap_layout.addWidget(self.mindmap_label)
+        
+        # 创建简单的思维导图显示区域
+        self.mindmap_display = QTextEdit()
+        self.mindmap_display.setReadOnly(True)
+        self.mindmap_display.setFont(QFont("Arial", 10))
+        self.mindmap_display.setPlaceholderText("思维导图将显示在这里...")
+        self.mindmap_layout.addWidget(self.mindmap_display)
+        
+        right_splitter.addWidget(self.mindmap_widget)
+        
+        # 设置分割器初始比例
+        main_splitter.setSizes([200, 800])
+        right_splitter.setSizes([400, 200])
     
     def create_input_area(self, layout):
         """创建输入区域"""
@@ -765,6 +799,9 @@ class AIChatPyQt(QMainWindow):
             # 清空聊天窗口
             self.chat_history.clear()
             
+            # 更新思维导图
+            self.update_mindmap()
+            
             # 记录审计日志
             self.write_audit_log("用户", "开始新对话", f"新对话ID: {self.current_conversation_id}")
             
@@ -798,6 +835,38 @@ class AIChatPyQt(QMainWindow):
         # 自动保存对话历史
         self.save_history_auto()
         
+        # 更新思维导图
+        self.update_mindmap()
+    
+    def update_mindmap(self):
+        """更新思维导图"""
+        if not self.conversation_history:
+            self.mindmap_display.setPlainText("思维导图将显示在这里...")
+            return
+        
+        # 生成思维导图文本
+        mindmap_text = "# 思维可视化\n\n"
+        
+        # 过滤掉系统消息
+        user_messages = [msg for msg in self.conversation_history if msg["role"] == "user"]
+        assistant_messages = [msg for msg in self.conversation_history if msg["role"] == "assistant"]
+        
+        # 生成思维导图结构
+        for i in range(max(len(user_messages), len(assistant_messages))):
+            if i < len(user_messages):
+                user_msg = user_messages[i]["content"].strip()
+                mindmap_text += f"- 用户：{user_msg[:100]}...\n"
+                
+                if i < len(assistant_messages):
+                    assistant_msg = assistant_messages[i]["content"].strip()
+                    mindmap_text += f"  - AI：{assistant_msg[:100]}...\n\n"
+            elif i < len(assistant_messages):
+                assistant_msg = assistant_messages[i]["content"].strip()
+                mindmap_text += f"- AI：{assistant_msg[:100]}...\n\n"
+        
+        # 更新思维导图显示
+        self.mindmap_display.setPlainText(mindmap_text)
+        
     def regenerate_response(self):
         """重新生成上一条AI回答"""
         if not self.conversation_history:
@@ -816,6 +885,9 @@ class AIChatPyQt(QMainWindow):
         # 清空聊天窗口并重新加载历史
         self.chat_history.clear()
         self.load_history_to_chat()
+        
+        # 更新思维导图
+        self.update_mindmap()
         
         # 记录审计日志
         self.write_audit_log("用户", "重新生成回答", "重新生成上一条AI回复")
@@ -981,6 +1053,9 @@ class AIChatPyQt(QMainWindow):
             self.save_history_auto()
             self.conversation_history = []
             self.chat_history.clear()
+            
+            # 更新思维导图
+            self.update_mindmap()
             
             # 记录审计日志
             self.write_audit_log("用户", "清空历史", "清空当前对话历史")
