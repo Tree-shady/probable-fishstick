@@ -26,6 +26,7 @@ class ApiCallThread(QThread):
     response_received = pyqtSignal(str, str)  # sender, message
     error_occurred = pyqtSignal(str)  # error message
     status_changed = pyqtSignal(str)  # status message
+    debug_info = pyqtSignal(str)  # debug information
     
     def __init__(self, config, conversation_history, message):
         super().__init__()
@@ -54,10 +55,10 @@ class ApiCallThread(QThread):
                 "max_tokens": self.config["max_tokens"]
             }
             
-            # 打印请求信息用于调试
-            print(f"API请求URL: {self.config['api_url']}")
-            print(f"API请求头: {headers}")
-            print(f"API请求数据: {json.dumps(data, ensure_ascii=False)}")
+            # 发送调试信息
+            self.debug_info.emit(f"API请求URL: {self.config['api_url']}")
+            self.debug_info.emit(f"API请求头: {json.dumps(headers, indent=2, ensure_ascii=False)}")
+            self.debug_info.emit(f"API请求数据: {json.dumps(data, indent=2, ensure_ascii=False)}")
             
             response = requests.post(
                 self.config["api_url"],
@@ -66,10 +67,20 @@ class ApiCallThread(QThread):
                 timeout=30
             )
             
-            # 打印响应信息用于调试
-            print(f"API响应状态码: {response.status_code}")
-            print(f"API响应头: {response.headers}")
-            print(f"API原始响应: {response.text}")
+            # 发送调试信息
+            self.debug_info.emit(f"API响应状态码: {response.status_code}")
+            
+            # 格式化响应头
+            self.debug_info.emit(f"API响应头: {json.dumps(dict(response.headers), indent=2, ensure_ascii=False)}")
+            
+            # 格式化原始响应
+            try:
+                # 尝试解析为JSON并格式化
+                json_response = response.json()
+                self.debug_info.emit(f"API原始响应: {json.dumps(json_response, indent=2, ensure_ascii=False)}")
+            except json.JSONDecodeError:
+                # 如果不是JSON格式，直接显示
+                self.debug_info.emit(f"API原始响应: {response.text}")
             
             response.raise_for_status()
             
@@ -644,12 +655,28 @@ class AIChatPyQt(QMainWindow):
     
     def create_chat_history(self, layout):
         """创建对话历史区域"""
-        # 对话历史文本框
+        # 创建分割器，左侧显示调试信息，右侧显示对话历史
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        layout.addWidget(splitter, 1)
+        
+        # 左侧调试信息区域
+        self.debug_info = QTextEdit()
+        self.debug_info.setReadOnly(True)
+        self.debug_info.setFont(QFont("Courier New", 10))
+        self.debug_info.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.debug_info.setPlaceholderText("调试信息将显示在这里...")
+        self.debug_info.setMinimumWidth(200)  # 进一步减小最小宽度
+        splitter.addWidget(self.debug_info)
+        
+        # 右侧对话历史区域
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
         self.chat_history.setFont(QFont("Arial", 12))
         self.chat_history.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        layout.addWidget(self.chat_history, 1)
+        splitter.addWidget(self.chat_history)
+        
+        # 设置分割器初始比例，进一步减小调试信息区域宽度
+        splitter.setSizes([200, 600])
     
     def create_input_area(self, layout):
         """创建输入区域"""
@@ -738,6 +765,7 @@ class AIChatPyQt(QMainWindow):
         self.api_thread.response_received.connect(self.on_response_received)
         self.api_thread.error_occurred.connect(self.on_error_occurred)
         self.api_thread.status_changed.connect(self.status_bar.showMessage)
+        self.api_thread.debug_info.connect(self.add_debug_info)
         self.api_thread.finished.connect(self.on_api_thread_finished)
         self.api_thread.start()
     
@@ -923,6 +951,19 @@ class AIChatPyQt(QMainWindow):
         
         # 滚动到底部
         self.chat_history.ensureCursorVisible()
+    
+    def add_debug_info(self, message):
+        """添加调试信息到左侧调试区域"""
+        # 添加时间戳
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 插入调试信息
+        self.debug_info.moveCursor(QTextCursor.MoveOperation.End)
+        self.debug_info.insertHtml(f"<b>[{now}] 调试信息:</b><br>")
+        self.debug_info.insertPlainText(f"{message}\n\n")
+        
+        # 滚动到底部
+        self.debug_info.ensureCursorVisible()
     
     def open_config_dialog(self):
         """打开配置对话框"""
