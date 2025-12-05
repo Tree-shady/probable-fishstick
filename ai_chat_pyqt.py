@@ -473,6 +473,9 @@ class AIChatPyQt(QMainWindow):
         
         # 更新当前模型显示
         self.update_current_model_display()
+        
+        # 应用当前主题
+        self.apply_theme(self.current_theme)
     
     def fade_in(self):
         """主窗口淡入动画"""
@@ -531,6 +534,12 @@ class AIChatPyQt(QMainWindow):
             self.current_model_name = model_name
             # 保存到文件
             self.save_model_configs()
+        
+        # 主题配置相关变量
+        self.themes_file = 'themes.json'
+        self.themes = self.load_themes()
+        self.current_theme = self.config.get('current_theme', 'light')
+        self.theme_prefs_file = 'theme_prefs.json'
         
         # 设置全局样式，确保消息框字体清晰可见
         app = QApplication.instance()
@@ -715,6 +724,26 @@ class AIChatPyQt(QMainWindow):
         reset_font_action.setShortcut("Ctrl+0")
         reset_font_action.triggered.connect(self.reset_font_size)
         font_menu.addAction(reset_font_action)
+        
+        # 主题切换子菜单
+        theme_menu = QMenu("主题", self)
+        view_menu.addMenu(theme_menu)
+        
+        # 添加主题选项
+        for theme_name in self.themes:
+            theme_info = self.themes[theme_name]
+            action = QAction(theme_info["name"], self)
+            action.setToolTip(theme_info["description"])
+            action.triggered.connect(lambda checked=False, tn=theme_name: self.apply_theme(tn))
+            theme_menu.addAction(action)
+        
+        # 添加分隔线
+        view_menu.addSeparator()
+        
+        # 主题重置选项
+        reset_theme_action = QAction("重置主题", self)
+        reset_theme_action.triggered.connect(lambda: self.apply_theme("light"))
+        view_menu.addAction(reset_theme_action)
         
         # 帮助菜单
         help_menu = QMenu("帮助", self)
@@ -1579,10 +1608,108 @@ class AIChatPyQt(QMainWindow):
             # 同时将当前模型配置保存到主配置文件
             if self.current_model_name in self.model_configs:
                 # 将当前模型配置保存到 config.json
+                current_config = self.model_configs[self.current_model_name].copy()
+                current_config['current_theme'] = self.current_theme  # 保存当前主题
                 with open(self.config_file, 'w', encoding='utf-8') as f:
-                    json.dump(self.model_configs[self.current_model_name], f, indent=2, ensure_ascii=False)
+                    json.dump(current_config, f, indent=2, ensure_ascii=False)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"保存模型配置失败: {str(e)}")
+    
+    def load_themes(self):
+        """加载主题配置"""
+        try:
+            if os.path.exists(self.themes_file):
+                with open(self.themes_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                QMessageBox.warning(self, "警告", f"主题配置文件 {self.themes_file} 不存在，使用默认主题")
+                return {}
+        except json.JSONDecodeError:
+            QMessageBox.critical(self, "错误", f"主题配置文件 {self.themes_file} 格式错误")
+            return {}
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载主题配置失败: {str(e)}")
+            return {}
+    
+    def apply_theme(self, theme_name):
+        """应用指定主题"""
+        if theme_name not in self.themes:
+            QMessageBox.warning(self, "警告", f"主题 {theme_name} 不存在，使用默认主题")
+            return
+        
+        # 更新当前主题
+        self.current_theme = theme_name
+        
+        # 获取主题配置
+        theme = self.themes[theme_name]
+        
+        # 应用全局样式
+        app = QApplication.instance()
+        app.setStyleSheet(
+            f"""QMainWindow {{ background-color: {theme['background']}; }}""" +
+            f"""QWidget {{ background-color: {theme['background']}; color: {theme['text']}; }}""" +
+            f"""QMenuBar {{ background-color: {theme['header']}; border-bottom: 1px solid {theme['border']}; }}""" +
+            f"""QMenuBar::item {{ padding: 8px 16px; }}""" +
+            f"""QMenuBar::item::selected {{ background-color: {theme['primary']}; color: {theme['text']}; }}""" +
+            f"""QMenu {{ background-color: {theme['secondary']}; border: 1px solid {theme['border']}; }}""" +
+            f"""QMenu::item {{ padding: 8px 20px; }}""" +
+            f"""QMenu::item::selected {{ background-color: {theme['primary']}; color: {theme['text']}; }}""" +
+            f"""QPushButton {{ background-color: {theme['button_bg']}; color: {theme['button_text']}; border: none; padding: 8px 16px; border-radius: 2px; }}""" +
+            f"""QPushButton:hover {{ background-color: {theme['button_hover']}; }}""" +
+            f"""QLineEdit {{ background-color: {theme['input_bg']}; color: {theme['input_text']}; border: 1px solid {theme['border']}; padding: 6px; border-radius: 2px; }}""" +
+            f"""QTextEdit {{ background-color: {theme['input_bg']}; color: {theme['input_text']}; border: 1px solid {theme['border']}; padding: 6px; border-radius: 2px; }}""" +
+            f"""QSplitter::handle {{ background-color: {theme['scrollbar']}; }}""" +
+            f"""QScrollBar:vertical {{ background-color: {theme['scrollbar']}; width: 10px; }}""" +
+            f"""QScrollBar::handle:vertical {{ background-color: {theme['scrollbar_hover']}; border-radius: 5px; }}""" +
+            f"""QScrollBar:horizontal {{ background-color: {theme['scrollbar']}; height: 10px; }}""" +
+            f"""QScrollBar::handle:horizontal {{ background-color: {theme['scrollbar_hover']}; border-radius: 5px; }}""" +
+            f"""QLabel {{ color: {theme['text']}; }}""" +
+            f"""QMessageBox {{ background-color: {theme['secondary']}; color: {theme['text']}; }}""" +
+            f"""QMessageBox QPushButton {{ background-color: {theme['button_bg']}; color: {theme['button_text']}; }}""" +
+            f"""QTabWidget::pane {{ border: 1px solid {theme['border']}; background-color: {theme['background']}; }}""" +
+            f"""QTabBar::tab {{ background-color: {theme['secondary']}; border: 1px solid {theme['border']}; padding: 8px 16px; margin-right: 2px; }}""" +
+            f"""QTabBar::tab::selected {{ background-color: {theme['primary']}; color: {theme['text']}; }}"""
+        )
+        
+        # 保存主题偏好
+        self.save_theme_prefs()
+        
+        # 更新主配置文件
+        self.save_config()
+        
+        # 应用特定组件样式
+        if hasattr(self, 'chat_history'):
+            self.chat_history.setStyleSheet(f"background-color: {theme['chat_history_bg']}; color: {theme['chat_history_text']};")
+        if hasattr(self, 'debug_info'):
+            self.debug_info.setStyleSheet(f"background-color: {theme['debug_bg']}; color: {theme['debug_text']};")
+        if hasattr(self, 'input_text'):
+            self.input_text.setStyleSheet(f"background-color: {theme['input_bg']}; color: {theme['input_text']};")
+    
+    def save_theme_prefs(self):
+        """保存主题偏好"""
+        try:
+            theme_prefs = {
+                'current_theme': self.current_theme
+            }
+            with open(self.theme_prefs_file, 'w', encoding='utf-8') as f:
+                json.dump(theme_prefs, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存主题偏好失败: {str(e)}")
+    
+    def load_theme_prefs(self):
+        """加载主题偏好"""
+        try:
+            if os.path.exists(self.theme_prefs_file):
+                with open(self.theme_prefs_file, 'r', encoding='utf-8') as f:
+                    theme_prefs = json.load(f)
+                    return theme_prefs.get('current_theme', 'light')
+            return 'light'
+        except json.JSONDecodeError:
+            QMessageBox.warning(self, "警告", f"主题偏好文件 {self.theme_prefs_file} 格式错误，使用默认主题")
+            return 'light'
+        except Exception as e:
+            QMessageBox.warning(self, "警告", f"加载主题偏好失败: {str(e)}，使用默认主题")
+            return 'light'
     
     def update_current_model_display(self):
         """更新当前模型显示"""
