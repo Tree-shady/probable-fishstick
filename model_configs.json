@@ -1,0 +1,16 @@
+{
+  "deepseek-v3.1": {
+    "api_url": "https://apis.iflow.cn/v1/chat/completions",
+    "api_key": "sk-399273a84a274c7b0db1007d0c4fe1e6",
+    "model": "deepseek-v3.1",
+    "temperature": 0.7,
+    "max_tokens": 1000
+  },
+  "硅基流动": {
+    "api_url": "https://api.siliconflow.cn/v1/chat/completions",
+    "api_key": "sk-ygadudgctikzgsmswsyrfpltkqyerrajjujqvszfvjwtuaml",
+    "model": "deepseek-ai/DeepSeek-R1",
+    "temperature": 0.7,
+    "max_tokens": 1000
+  }
+}

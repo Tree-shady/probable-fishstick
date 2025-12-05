@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QDialog, QLabel, QLineEdit, QGridLayout, QMessageBox, QProgressBar,
     QInputDialog, QListWidget, QSplitter, QTabWidget
 )
+import time
 
 # 导入对话管理模块
 from conversation_manager import ConversationManager
@@ -336,9 +337,7 @@ class AIChatPyQt(QMainWindow):
             "humorous": "使用风趣幽默的语气，保持轻松愉快的氛围。"
         }
         
-        # 初始化思维可视化
-        self.mindmap_data = {}
-        self.mindmap_counter = 0
+
         
         # 创建或加载当前对话
         self._init_current_conversation()
@@ -463,6 +462,9 @@ class AIChatPyQt(QMainWindow):
         
         # 加载历史记录到聊天窗口
         self.load_history_to_chat()
+        
+        # 更新当前模型显示
+        self.update_current_model_display()
     
     def fade_in(self):
         """主窗口淡入动画"""
@@ -484,6 +486,66 @@ class AIChatPyQt(QMainWindow):
         """初始化主界面"""
         self.setWindowTitle("AI对话软件")
         self.setGeometry(100, 100, 800, 600)
+        
+        # 字体大小相关变量
+        self.default_font_size = 12
+        self.current_font_size = self.default_font_size
+        
+        # API模型配置相关变量
+        self.model_configs_file = 'model_configs.json'
+        self.model_configs = self.load_model_configs()
+        
+        # 检查当前配置是否存在于模型列表中，如果不存在则添加
+        self.current_model_name = "默认模型"
+        config_exists = False
+        
+        # 遍历模型配置，查找是否存在相同的核心配置
+        for name, model_config in self.model_configs.items():
+            if (model_config["api_url"] == self.config["api_url"] and
+                model_config["model"] == self.config["model"]):
+                self.current_model_name = name
+                config_exists = True
+                break
+        
+        # 如果当前配置不存在于模型列表中，添加到模型列表
+        if not config_exists:
+            # 从配置中获取模型名称，如果没有则使用默认名称
+            model_name = self.config["model"] or "默认模型"
+            # 如果默认名称已存在，添加后缀
+            if model_name in self.model_configs:
+                counter = 1
+                while f"{model_name}_{counter}" in self.model_configs:
+                    counter += 1
+                model_name = f"{model_name}_{counter}"
+            
+            # 添加到模型配置列表
+            self.model_configs[model_name] = self.config.copy()
+            self.current_model_name = model_name
+            # 保存到文件
+            self.save_model_configs()
+        
+        # 设置全局样式，确保消息框字体清晰可见
+        app = QApplication.instance()
+        app.setStyleSheet(
+            "QMessageBox { "
+            "    background-color: white; "
+            "    color: black; "
+            "}"
+            "QMessageBox QLabel { "
+            "    color: black; "
+            "    font-weight: normal; "
+            "}"
+            "QMessageBox QPushButton { "
+            "    background-color: #0078d4; "
+            "    color: white; "
+            "    border: none; "
+            "    padding: 5px 15px; "
+            "    border-radius: 2px; "
+            "}"
+            "QMessageBox QPushButton:hover { "
+            "    background-color: #106ebe; "
+            "}"
+        )
         
         # 创建中心部件
         central_widget = QWidget()
@@ -515,14 +577,17 @@ class AIChatPyQt(QMainWindow):
         menubar.addMenu(file_menu)
         
         config_action = QAction("配置", self)
+        config_action.setShortcut("Ctrl+P")
         config_action.triggered.connect(self.open_config_dialog)
         file_menu.addAction(config_action)
         
         new_conv_action = QAction("新对话", self)
+        new_conv_action.setShortcut("Ctrl+N")
         new_conv_action.triggered.connect(self.new_conversation)
         file_menu.addAction(new_conv_action)
         
         clear_action = QAction("清空历史", self)
+        clear_action.setShortcut("Ctrl+Shift+L")
         clear_action.triggered.connect(self.clear_history)
         file_menu.addAction(clear_action)
         
@@ -533,6 +598,7 @@ class AIChatPyQt(QMainWindow):
         menubar.addMenu(chat_menu)
         
         regenerate_action = QAction("重新生成回答", self)
+        regenerate_action.setShortcut("Ctrl+R")
         regenerate_action.triggered.connect(self.regenerate_response)
         chat_menu.addAction(regenerate_action)
         
@@ -560,8 +626,23 @@ class AIChatPyQt(QMainWindow):
         file_menu.addSeparator()
         
         save_history_action = QAction("保存对话历史", self)
+        save_history_action.setShortcut("Ctrl+S")
         save_history_action.triggered.connect(self.save_history)
         file_menu.addAction(save_history_action)
+        
+        # 导出对话子菜单
+        export_menu = QMenu("导出对话", self)
+        file_menu.addMenu(export_menu)
+        
+        # 导出为Markdown
+        export_markdown_action = QAction("导出为Markdown", self)
+        export_markdown_action.triggered.connect(lambda: self.export_conversation("markdown"))
+        export_menu.addAction(export_markdown_action)
+        
+        # 导出为TXT
+        export_txt_action = QAction("导出为TXT", self)
+        export_txt_action.triggered.connect(lambda: self.export_conversation("txt"))
+        export_menu.addAction(export_txt_action)
         
         export_config_action = QAction("导出配置", self)
         export_config_action.triggered.connect(self.export_config)
@@ -574,6 +655,7 @@ class AIChatPyQt(QMainWindow):
         file_menu.addSeparator()
         
         exit_action = QAction("退出", self)
+        exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
@@ -600,6 +682,32 @@ class AIChatPyQt(QMainWindow):
         style_action.triggered.connect(self.show_style_imitation_dialog)
         preset_menu.addAction(style_action)
         
+        # 视图菜单
+        view_menu = QMenu("视图", self)
+        menubar.addMenu(view_menu)
+        
+        # 字体大小调整子菜单
+        font_menu = QMenu("字体大小", self)
+        view_menu.addMenu(font_menu)
+        
+        # 增大字体
+        increase_font_action = QAction("增大字体", self)
+        increase_font_action.setShortcut("Ctrl++")
+        increase_font_action.triggered.connect(self.increase_font_size)
+        font_menu.addAction(increase_font_action)
+        
+        # 减小字体
+        decrease_font_action = QAction("减小字体", self)
+        decrease_font_action.setShortcut("Ctrl+- ")
+        decrease_font_action.triggered.connect(self.decrease_font_size)
+        font_menu.addAction(decrease_font_action)
+        
+        # 重置字体大小
+        reset_font_action = QAction("重置字体大小", self)
+        reset_font_action.setShortcut("Ctrl+0")
+        reset_font_action.triggered.connect(self.reset_font_size)
+        font_menu.addAction(reset_font_action)
+        
         # 帮助菜单
         help_menu = QMenu("帮助", self)
         menubar.addMenu(help_menu)
@@ -614,58 +722,117 @@ class AIChatPyQt(QMainWindow):
     
     def create_chat_history(self, layout):
         """创建对话历史区域"""
-        # 创建分割器，左侧显示调试信息，右侧显示对话历史和思维导图
+        # 创建分割器，左侧显示调试信息，右侧显示对话历史
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         layout.addWidget(main_splitter, 1)
         
-        # 左侧调试信息区域
+        # 左侧容器，用于包含模型切换和调试信息
+        left_container = QWidget()
+        left_layout = QVBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(5)
+        
+        # 模型切换信息框
+        self.model_switcher = QWidget()
+        self.model_switcher.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
+        model_layout = QVBoxLayout(self.model_switcher)
+        model_layout.setContentsMargins(5, 5, 5, 5)
+        model_layout.setSpacing(3)
+        
+        # 模型信息标题
+        model_title = QLabel("当前模型:")
+        model_title.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        model_title.setStyleSheet("color: #0078d4;")
+        model_layout.addWidget(model_title)
+        
+        # 服务商和模型名称显示
+        self.current_model_label = QLabel("未配置")
+        self.current_model_label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        self.current_model_label.setStyleSheet("background-color: #f0f0f0; color: #0078d4; padding: 3px; border-radius: 2px;")
+        model_layout.addWidget(self.current_model_label)
+        
+        # 模型切换按钮
+        switch_button = QPushButton("切换模型")
+        switch_button.setFont(QFont("Arial", 8, QFont.Weight.Medium))
+        switch_button.setFixedHeight(25)
+        switch_button.setStyleSheet("background-color: #0078d4; color: white; border: none; border-radius: 2px;")
+        switch_button.clicked.connect(self.show_model_switcher)
+        model_layout.addWidget(switch_button)
+        
+        # 配置模型按钮
+        config_button = QPushButton("配置模型")
+        config_button.setFont(QFont("Arial", 8, QFont.Weight.Medium))
+        config_button.setFixedHeight(25)
+        config_button.setStyleSheet("background-color: #6c757d; color: white; border: none; border-radius: 2px;")
+        config_button.clicked.connect(self.open_config_dialog)
+        model_layout.addWidget(config_button)
+        
+        # 将模型切换信息框添加到左侧布局
+        left_layout.addWidget(self.model_switcher)
+        
+        # 调试信息区域
         self.debug_info = QTextEdit()
         self.debug_info.setReadOnly(True)
         self.debug_info.setFont(QFont("Courier New", 10))
         self.debug_info.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.debug_info.setPlaceholderText("调试信息将显示在这里...")
         self.debug_info.setMinimumWidth(200)  # 进一步减小最小宽度
-        main_splitter.addWidget(self.debug_info)
         
-        # 右侧容器，用于包含对话历史和思维导图
+        # 将调试信息添加到左侧布局
+        left_layout.addWidget(self.debug_info, 1)  # 占据剩余空间
+        
+        # 将左侧容器添加到分割器
+        main_splitter.addWidget(left_container)
+        
+        # 右侧容器，用于包含对话历史
         right_container = QWidget()
         right_layout = QVBoxLayout(right_container)
         main_splitter.addWidget(right_container)
         
-        # 对话历史和思维导图垂直分割器
-        right_splitter = QSplitter(Qt.Orientation.Vertical)
-        right_layout.addWidget(right_splitter)
+        # 添加搜索栏
+        search_layout = QHBoxLayout()
+        search_layout.setContentsMargins(0, 0, 0, 10)
         
-        # 上部分：对话历史区域
+        # 搜索输入框
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("搜索对话内容...")
+        self.search_input.returnPressed.connect(self.search_text)
+        search_layout.addWidget(self.search_input)
+        
+        # 搜索按钮
+        self.search_button = QPushButton("搜索")
+        self.search_button.clicked.connect(self.search_text)
+        search_layout.addWidget(self.search_button)
+        
+        # 下一个匹配项按钮
+        self.next_button = QPushButton("下一个")
+        self.next_button.clicked.connect(self.find_next)
+        self.next_button.setEnabled(False)
+        search_layout.addWidget(self.next_button)
+        
+        # 清除搜索按钮
+        self.clear_search_button = QPushButton("清除")
+        self.clear_search_button.clicked.connect(self.clear_search)
+        search_layout.addWidget(self.clear_search_button)
+        
+        right_layout.addLayout(search_layout)
+        
+        # 对话历史区域
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
         self.chat_history.setFont(QFont("Arial", 12))
         self.chat_history.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        right_splitter.addWidget(self.chat_history)
+        # 启用右键菜单
+        self.chat_history.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.chat_history.customContextMenuRequested.connect(self.show_chat_context_menu)
+        right_layout.addWidget(self.chat_history)
         
-        # 下部分：思维导图区域
-        self.mindmap_widget = QWidget()
-        self.mindmap_layout = QVBoxLayout(self.mindmap_widget)
-        self.mindmap_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 添加思维导图标题
-        self.mindmap_label = QLabel("思维可视化")
-        self.mindmap_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.mindmap_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        self.mindmap_layout.addWidget(self.mindmap_label)
-        
-        # 创建简单的思维导图显示区域
-        self.mindmap_display = QTextEdit()
-        self.mindmap_display.setReadOnly(True)
-        self.mindmap_display.setFont(QFont("Arial", 10))
-        self.mindmap_display.setPlaceholderText("思维导图将显示在这里...")
-        self.mindmap_layout.addWidget(self.mindmap_display)
-        
-        right_splitter.addWidget(self.mindmap_widget)
+        # 搜索相关变量
+        self.search_results = []
+        self.current_search_index = -1
         
         # 设置分割器初始比例
         main_splitter.setSizes([200, 800])
-        right_splitter.setSizes([400, 200])
     
     def create_input_area(self, layout):
         """创建输入区域"""
@@ -799,9 +966,6 @@ class AIChatPyQt(QMainWindow):
             # 清空聊天窗口
             self.chat_history.clear()
             
-            # 更新思维导图
-            self.update_mindmap()
-            
             # 记录审计日志
             self.write_audit_log("用户", "开始新对话", f"新对话ID: {self.current_conversation_id}")
             
@@ -834,39 +998,7 @@ class AIChatPyQt(QMainWindow):
         
         # 自动保存对话历史
         self.save_history_auto()
-        
-        # 更新思维导图
-        self.update_mindmap()
     
-    def update_mindmap(self):
-        """更新思维导图"""
-        if not self.conversation_history:
-            self.mindmap_display.setPlainText("思维导图将显示在这里...")
-            return
-        
-        # 生成思维导图文本
-        mindmap_text = "# 思维可视化\n\n"
-        
-        # 过滤掉系统消息
-        user_messages = [msg for msg in self.conversation_history if msg["role"] == "user"]
-        assistant_messages = [msg for msg in self.conversation_history if msg["role"] == "assistant"]
-        
-        # 生成思维导图结构
-        for i in range(max(len(user_messages), len(assistant_messages))):
-            if i < len(user_messages):
-                user_msg = user_messages[i]["content"].strip()
-                mindmap_text += f"- 用户：{user_msg[:100]}...\n"
-                
-                if i < len(assistant_messages):
-                    assistant_msg = assistant_messages[i]["content"].strip()
-                    mindmap_text += f"  - AI：{assistant_msg[:100]}...\n\n"
-            elif i < len(assistant_messages):
-                assistant_msg = assistant_messages[i]["content"].strip()
-                mindmap_text += f"- AI：{assistant_msg[:100]}...\n\n"
-        
-        # 更新思维导图显示
-        self.mindmap_display.setPlainText(mindmap_text)
-        
     def regenerate_response(self):
         """重新生成上一条AI回答"""
         if not self.conversation_history:
@@ -885,9 +1017,6 @@ class AIChatPyQt(QMainWindow):
         # 清空聊天窗口并重新加载历史
         self.chat_history.clear()
         self.load_history_to_chat()
-        
-        # 更新思维导图
-        self.update_mindmap()
         
         # 记录审计日志
         self.write_audit_log("用户", "重新生成回答", "重新生成上一条AI回复")
@@ -1053,9 +1182,6 @@ class AIChatPyQt(QMainWindow):
             self.save_history_auto()
             self.conversation_history = []
             self.chat_history.clear()
-            
-            # 更新思维导图
-            self.update_mindmap()
             
             # 记录审计日志
             self.write_audit_log("用户", "清空历史", "清空当前对话历史")
@@ -1397,12 +1523,548 @@ class AIChatPyQt(QMainWindow):
                 self.config.update(imported_config)
                 self.save_config()
                 QMessageBox.information(self, "成功", f"配置已从 {filename} 导入并保存！")
+                # 更新当前模型显示
+                self.update_current_model_display()
             except FileNotFoundError:
                 QMessageBox.critical(self, "错误", f"文件 {filename} 不存在！")
             except json.JSONDecodeError:
                 QMessageBox.critical(self, "错误", f"文件 {filename} 格式错误！")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"导入配置失败: {str(e)}")
+    
+    def load_model_configs(self):
+        """加载模型配置"""
+        try:
+            if os.path.exists(self.model_configs_file):
+                with open(self.model_configs_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                # 返回默认配置
+                return {
+                    "默认模型": {
+                        "api_url": "https://api.openai.com/v1/chat/completions",
+                        "api_key": "",
+                        "model": "gpt-3.5-turbo",
+                        "temperature": 0.7,
+                        "max_tokens": 1000
+                    }
+                }
+        except json.JSONDecodeError:
+            QMessageBox.critical(self, "错误", f"模型配置文件格式错误！")
+            return {
+                "默认模型": {
+                    "api_url": "https://api.openai.com/v1/chat/completions",
+                    "api_key": "",
+                    "model": "gpt-3.5-turbo",
+                    "temperature": 0.7,
+                    "max_tokens": 1000
+                }
+            }
+    
+    def save_model_configs(self):
+        """保存模型配置到本地文件"""
+        try:
+            # 保存所有模型配置到 model_configs.json
+            with open(self.model_configs_file, 'w', encoding='utf-8') as f:
+                json.dump(self.model_configs, f, indent=2, ensure_ascii=False)
+            
+            # 同时将当前模型配置保存到主配置文件
+            if self.current_model_name in self.model_configs:
+                # 将当前模型配置保存到 config.json
+                with open(self.config_file, 'w', encoding='utf-8') as f:
+                    json.dump(self.model_configs[self.current_model_name], f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存模型配置失败: {str(e)}")
+    
+    def update_current_model_display(self):
+        """更新当前模型显示"""
+        if self.current_model_name in self.model_configs:
+            model = self.model_configs[self.current_model_name]
+            self.current_model_label.setText(f"{self.current_model_name}: {model['model']}")
+        else:
+            self.current_model_label.setText("未配置")
+    
+    def show_model_switcher(self):
+        """显示模型切换对话框"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QLabel
+        
+        # 创建对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("切换模型")
+        dialog.setFixedSize(350, 250)
+        
+        # 创建布局
+        layout = QVBoxLayout(dialog)
+        
+        # 提示标签
+        hint_label = QLabel("选择要使用的模型:")
+        layout.addWidget(hint_label)
+        
+        # 模型列表
+        self.model_list = QListWidget()
+        self.model_list.addItems(self.model_configs.keys())
+        # 设置当前选中项
+        current_index = self.model_list.findItems(self.current_model_name, Qt.MatchFlag.MatchExactly)
+        if current_index:
+            self.model_list.setCurrentItem(current_index[0])
+        layout.addWidget(self.model_list, 1)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        layout.addLayout(button_layout)
+        
+        # 添加模型按钮
+        add_button = QPushButton("添加模型")
+        add_button.clicked.connect(lambda: self.add_or_edit_model())
+        button_layout.addWidget(add_button)
+        
+        # 编辑模型按钮
+        edit_button = QPushButton("编辑模型")
+        edit_button.clicked.connect(lambda: self.add_or_edit_model(self.model_list.currentItem().text() if self.model_list.currentItem() else None))
+        button_layout.addWidget(edit_button)
+        
+        # 删除模型按钮
+        delete_button = QPushButton("删除模型")
+        delete_button.clicked.connect(self.delete_model)
+        button_layout.addWidget(delete_button)
+        
+        # 确定按钮
+        ok_button = QPushButton("确定")
+        ok_button.clicked.connect(self.switch_model)
+        button_layout.addWidget(ok_button)
+        
+        # 取消按钮
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_button)
+        
+        # 显示对话框
+        dialog.exec()
+    
+    def add_or_edit_model(self, model_name=None):
+        """添加或编辑模型配置"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QGridLayout
+        
+        # 创建对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("添加模型" if not model_name else "编辑模型")
+        dialog.setFixedSize(450, 300)
+        
+        # 创建布局
+        layout = QVBoxLayout(dialog)
+        
+        # 网格布局，用于放置输入控件
+        grid_layout = QGridLayout()
+        layout.addLayout(grid_layout)
+        
+        # 模型名称输入
+        grid_layout.addWidget(QLabel("模型名称:"), 0, 0, 1, 1, Qt.AlignmentFlag.AlignRight)
+        self.model_name_input = QLineEdit()
+        if model_name:
+            self.model_name_input.setText(model_name)
+            self.model_name_input.setReadOnly(True)  # 编辑时模型名称不可修改
+        grid_layout.addWidget(self.model_name_input, 0, 1, 1, 3)
+        
+        # API URL输入
+        grid_layout.addWidget(QLabel("API URL:"), 1, 0, 1, 1, Qt.AlignmentFlag.AlignRight)
+        self.model_api_url_input = QLineEdit()
+        grid_layout.addWidget(self.model_api_url_input, 1, 1, 1, 3)
+        
+        # API Key输入
+        grid_layout.addWidget(QLabel("API Key:"), 2, 0, 1, 1, Qt.AlignmentFlag.AlignRight)
+        self.model_api_key_input = QLineEdit()
+        self.model_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        grid_layout.addWidget(self.model_api_key_input, 2, 1, 1, 3)
+        
+        # 模型名称输入
+        grid_layout.addWidget(QLabel("模型名称:"), 3, 0, 1, 1, Qt.AlignmentFlag.AlignRight)
+        self.model_model_input = QLineEdit()
+        grid_layout.addWidget(self.model_model_input, 3, 1, 1, 3)
+        
+        # 温度参数输入
+        grid_layout.addWidget(QLabel("温度参数:"), 4, 0, 1, 1, Qt.AlignmentFlag.AlignRight)
+        self.model_temperature_input = QLineEdit()
+        grid_layout.addWidget(self.model_temperature_input, 4, 1, 1, 1)
+        
+        # 最大Tokens输入
+        grid_layout.addWidget(QLabel("最大Tokens:"), 4, 2, 1, 1, Qt.AlignmentFlag.AlignRight)
+        self.model_max_tokens_input = QLineEdit()
+        grid_layout.addWidget(self.model_max_tokens_input, 4, 3, 1, 1)
+        
+        # 如果是编辑模型，加载现有配置
+        if model_name and model_name in self.model_configs:
+            config = self.model_configs[model_name]
+            self.model_api_url_input.setText(config["api_url"])
+            self.model_api_key_input.setText(config["api_key"])
+            self.model_model_input.setText(config["model"])
+            self.model_temperature_input.setText(str(config["temperature"]))
+            self.model_max_tokens_input.setText(str(config["max_tokens"]))
+        else:
+            # 默认值
+            self.model_temperature_input.setText("0.7")
+            self.model_max_tokens_input.setText("1000")
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        layout.addLayout(button_layout)
+        
+        # 确定按钮
+        ok_button = QPushButton("确定")
+        ok_button.clicked.connect(lambda: self.save_model_config(dialog, model_name))
+        button_layout.addWidget(ok_button, alignment=Qt.AlignmentFlag.AlignRight)
+        
+        # 取消按钮
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_button, alignment=Qt.AlignmentFlag.AlignRight)
+        button_layout.addSpacing(10)
+        
+        # 显示对话框
+        dialog.exec()
+    
+    def save_model_config(self, dialog, model_name=None):
+        """保存模型配置"""
+        try:
+            # 获取输入值
+            name = self.model_name_input.text().strip()
+            if not name:
+                QMessageBox.critical(dialog, "错误", "模型名称不能为空！")
+                return
+            
+            if not model_name and name in self.model_configs:
+                QMessageBox.critical(dialog, "错误", "模型名称已存在！")
+                return
+            
+            # 验证数值输入
+            try:
+                temperature = float(self.model_temperature_input.text().strip())
+                max_tokens = int(self.model_max_tokens_input.text().strip())
+            except ValueError:
+                QMessageBox.critical(dialog, "错误", "温度参数或最大Tokens格式错误！")
+                return
+            
+            # 保存配置
+            config = {
+                "api_url": self.model_api_url_input.text().strip(),
+                "api_key": self.model_api_key_input.text().strip(),
+                "model": self.model_model_input.text().strip(),
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+            
+            if model_name:
+                # 更新现有模型
+                self.model_configs[name] = config
+            else:
+                # 添加新模型
+                self.model_configs[name] = config
+            
+            # 保存到文件
+            self.save_model_configs()
+            
+            QMessageBox.information(dialog, "成功", f"模型 {'更新' if model_name else '添加'} 成功！")
+            dialog.accept()
+            
+            # 如果是当前使用的模型，同步更新软件配置和本地配置文件
+            if name == self.current_model_name or not model_name and len(self.model_configs) == 1:
+                self.switch_to_model(name)
+            # 否则，确保当前模型的配置与本地配置文件同步
+            else:
+                self.save_config()
+        except Exception as e:
+            QMessageBox.critical(dialog, "错误", f"保存模型配置失败: {str(e)}")
+    
+    def delete_model(self):
+        """删除模型"""
+        current_item = self.model_list.currentItem()
+        if not current_item:
+            QMessageBox.information(self, "提示", "请选择要删除的模型！")
+            return
+        
+        model_name = current_item.text()
+        
+        # 不能删除当前使用的模型
+        if model_name == self.current_model_name:
+            QMessageBox.warning(self, "警告", "不能删除当前正在使用的模型！")
+            return
+        
+        # 确认删除
+        reply = QMessageBox.question(
+            self, "确认删除", f"确定要删除模型 '{model_name}' 吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            del self.model_configs[model_name]
+            self.save_model_configs()
+            # 更新模型列表
+            self.model_list.takeItem(self.model_list.row(current_item))
+            QMessageBox.information(self, "成功", f"模型 '{model_name}' 已删除！")
+    
+    def switch_model(self):
+        """切换模型"""
+        current_item = self.model_list.currentItem()
+        if current_item:
+            new_model_name = current_item.text()
+            self.switch_to_model(new_model_name)
+        
+        # 关闭对话框 - 修复AttributeError
+        # 获取对话框对象
+        button = self.sender()
+        if button:
+            dialog = button.parent().parent()
+            # 检查是否有accept方法
+            if hasattr(dialog, 'accept'):
+                dialog.accept()
+    
+    def switch_to_model(self, model_name):
+        """切换到指定模型"""
+        if model_name in self.model_configs:
+            # 更新当前模型名称
+            self.current_model_name = model_name
+            # 更新配置
+            self.config = self.model_configs[model_name].copy()
+            # 更新当前模型显示
+            self.update_current_model_display()
+            # 更新状态栏
+            self.status_bar.showMessage(f"已切换到模型: {model_name}")
+            # 同步更新本地配置文件
+            self.save_config()
+            # 提示用户切换成功
+            QMessageBox.information(self, "成功", f"已成功切换到模型: {model_name}")
+        else:
+            QMessageBox.critical(self, "错误", f"模型 '{model_name}' 不存在！")
+    
+    def show_chat_context_menu(self, position):
+        """显示聊天历史区域的右键菜单"""
+        from PyQt6.QtWidgets import QMenu
+        
+        # 创建右键菜单
+        menu = QMenu(self)
+        
+        # 检查是否有选中的文本
+        if self.chat_history.textCursor().hasSelection():
+            # 添加复制选项
+            copy_action = menu.addAction("复制")
+            copy_action.triggered.connect(self.copy_selected_text)
+        
+        # 显示菜单
+        if menu.actions():
+            menu.exec(self.chat_history.mapToGlobal(position))
+    
+    def copy_selected_text(self):
+        """复制选中的文本到剪贴板"""
+        from PyQt6.QtGui import QClipboard
+        
+        selected_text = self.chat_history.textCursor().selectedText()
+        clipboard = QApplication.clipboard()
+        clipboard.setText(selected_text)
+        self.status_bar.showMessage("已复制到剪贴板")
+    
+    def search_text(self):
+        """搜索文本并高亮匹配项"""
+        search_text = self.search_input.text().strip()
+        if not search_text:
+            QMessageBox.information(self, "提示", "请输入搜索内容！")
+            return
+        
+        # 清除之前的搜索结果
+        self.clear_search()
+        
+        # 获取聊天历史的纯文本
+        text = self.chat_history.toPlainText()
+        
+        # 查找所有匹配项
+        self.search_results = []
+        start_pos = 0
+        while True:
+            start_pos = text.find(search_text, start_pos)
+            if start_pos == -1:
+                break
+            end_pos = start_pos + len(search_text)
+            self.search_results.append((start_pos, end_pos))
+            start_pos = end_pos
+        
+        # 高亮匹配项
+        if self.search_results:
+            self.highlight_matches()
+            self.status_bar.showMessage(f"找到 {len(self.search_results)} 个匹配项")
+            self.next_button.setEnabled(True)
+            self.current_search_index = 0
+            self.jump_to_match(0)
+        else:
+            self.status_bar.showMessage("未找到匹配项")
+            QMessageBox.information(self, "提示", f"未找到 '{search_text}'")
+    
+    def highlight_matches(self):
+        """高亮所有匹配项"""
+        # 设置高亮格式
+        cursor = self.chat_history.textCursor()
+        format = cursor.charFormat()
+        
+        # 保存原始格式
+        self.original_format = format.copy()
+        
+        # 创建高亮格式
+        highlight_format = format.copy()
+        highlight_format.setBackground(QColor("yellow"))
+        highlight_format.setForeground(QColor("black"))
+        
+        # 应用高亮到所有匹配项
+        for start_pos, end_pos in self.search_results:
+            cursor.setPosition(start_pos)
+            cursor.setPosition(end_pos, QTextCursor.MoveMode.KeepAnchor)
+            cursor.setCharFormat(highlight_format)
+    
+    def find_next(self):
+        """跳转到下一个匹配项"""
+        if not self.search_results:
+            return
+        
+        self.current_search_index = (self.current_search_index + 1) % len(self.search_results)
+        self.jump_to_match(self.current_search_index)
+    
+    def jump_to_match(self, index):
+        """跳转到指定匹配项"""
+        if 0 <= index < len(self.search_results):
+            start_pos, end_pos = self.search_results[index]
+            cursor = self.chat_history.textCursor()
+            cursor.setPosition(start_pos)
+            cursor.setPosition(end_pos, QTextCursor.MoveMode.KeepAnchor)
+            self.chat_history.setTextCursor(cursor)
+            self.chat_history.ensureCursorVisible()
+            self.status_bar.showMessage(f"找到 {len(self.search_results)} 个匹配项，当前第 {index + 1} 个")
+    
+    def clear_search(self):
+        """清除搜索结果和高亮"""
+        # 清除搜索输入框
+        self.search_input.clear()
+        
+        # 重置搜索相关变量
+        self.search_results = []
+        self.current_search_index = -1
+        self.next_button.setEnabled(False)
+        
+        # 移除所有高亮
+        cursor = self.chat_history.textCursor()
+        cursor.select(QTextCursor.SelectionType.Document)
+        if hasattr(self, 'original_format'):
+            cursor.setCharFormat(self.original_format)
+        
+        # 重置状态消息
+        self.status_bar.showMessage("就绪")
+    
+    def increase_font_size(self):
+        """增大聊天历史区域的字体大小"""
+        self.current_font_size += 1
+        self.update_font_size()
+    
+    def decrease_font_size(self):
+        """减小聊天历史区域的字体大小"""
+        if self.current_font_size > 8:  # 最小字体大小限制
+            self.current_font_size -= 1
+            self.update_font_size()
+    
+    def reset_font_size(self):
+        """重置聊天历史区域的字体大小为默认值"""
+        self.current_font_size = self.default_font_size
+        self.update_font_size()
+    
+    def update_font_size(self):
+        """更新聊天历史区域的字体大小"""
+        # 更新聊天历史区域的字体
+        font = QFont("Arial", self.current_font_size)
+        self.chat_history.setFont(font)
+        
+        # 状态栏显示当前字体大小
+        self.status_bar.showMessage(f"当前字体大小: {self.current_font_size}")
+    
+    def export_conversation(self, format_type):
+        """导出对话历史到文件
+        
+        Args:
+            format_type: 导出格式，可选值："markdown"、"txt"
+        """
+        from PyQt6.QtWidgets import QFileDialog
+        
+        if not self.conversation_history:
+            QMessageBox.information(self, "提示", "对话历史为空，无法导出！")
+            return
+        
+        # 设置文件过滤器和默认扩展名
+        if format_type == "markdown":
+            file_filter = "Markdown 文件 (*.md)"
+            default_ext = "md"
+        else:  # txt
+            file_filter = "文本文件 (*.txt)"
+            default_ext = "txt"
+        
+        # 打开文件保存对话框
+        filename, _ = QFileDialog.getSaveFileName(
+            self, f"导出对话为{format_type.upper()}", 
+            f"conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{default_ext}",
+            file_filter
+        )
+        
+        if not filename:
+            return
+        
+        try:
+            # 生成导出内容
+            if format_type == "markdown":
+                content = self._generate_markdown_content()
+            else:  # txt
+                content = self._generate_txt_content()
+            
+            # 写入文件
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(content)
+            
+            QMessageBox.information(self, "成功", f"对话已成功导出到 {filename}！")
+            self.status_bar.showMessage(f"对话已导出到 {filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出对话失败: {str(e)}")
+    
+    def _generate_markdown_content(self):
+        """生成Markdown格式的对话内容"""
+        content = f"# AI对话历史\n\n"
+        content += f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        
+        for message in self.conversation_history:
+            role = message["role"]
+            message_content = message["content"]
+            
+            # 跳过系统消息
+            if role == "system":
+                continue
+            
+            sender = "用户" if role == "user" else "AI"
+            content += f"## {sender}\n\n"
+            content += f"> {message_content}\n\n"
+        
+        return content
+    
+    def _generate_txt_content(self):
+        """生成TXT格式的对话内容"""
+        content = f"AI对话历史\n"
+        content += f"=" * 50 + "\n"
+        content += f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        content += f"=" * 50 + "\n\n"
+        
+        for message in self.conversation_history:
+            role = message["role"]
+            message_content = message["content"]
+            
+            # 跳过系统消息
+            if role == "system":
+                continue
+            
+            sender = "用户" if role == "user" else "AI"
+            content += f"{sender}:\n"
+            content += f"{message_content}\n"
+            content += "-" * 50 + "\n\n"
+        
+        return content
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
