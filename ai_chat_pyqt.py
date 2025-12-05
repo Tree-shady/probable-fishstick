@@ -21,6 +21,8 @@ import time
 from conversation_manager import ConversationManager
 # 导入预设管理模块
 from preset_manager import PresetManager
+# 导入统计管理模块
+from statistics_manager import StatisticsManager
 # 导入审计日志相关模块
 import os
 import datetime
@@ -319,6 +321,9 @@ class AIChatPyQt(QMainWindow):
         
         # 初始化审计日志
         self._init_audit_log()
+        
+        # 初始化统计管理器
+        self.statistics_manager = StatisticsManager(self.conversation_manager)
         
         # 初始化动态人格与情绪模拟
         self.emotions = [
@@ -724,6 +729,20 @@ class AIChatPyQt(QMainWindow):
         reset_theme_action.triggered.connect(lambda: self.apply_theme("light"))
         view_menu.addAction(reset_theme_action)
         
+        # 统计菜单
+        stats_menu = QMenu("统计", self)
+        menubar.addMenu(stats_menu)
+        
+        # 查看统计报告
+        view_stats_action = QAction("查看统计报告", self)
+        view_stats_action.triggered.connect(self.show_statistics_report)
+        stats_menu.addAction(view_stats_action)
+        
+        # 导出统计数据
+        export_stats_action = QAction("导出统计数据", self)
+        export_stats_action.triggered.connect(self.export_statistics_data)
+        stats_menu.addAction(export_stats_action)
+        
         # 帮助菜单
         help_menu = QMenu("帮助", self)
         menubar.addMenu(help_menu)
@@ -755,9 +774,9 @@ class AIChatPyQt(QMainWindow):
         conversation_layout.addWidget(conv_title)
         
         # 文件夹管理区域
-        folder_section = QWidget()
-        folder_section.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
-        folder_layout = QVBoxLayout(folder_section)
+        self.folder_section = QWidget()
+        self.folder_section.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
+        folder_layout = QVBoxLayout(self.folder_section)
         folder_layout.setContentsMargins(5, 5, 5, 5)
         folder_layout.setSpacing(3)
         
@@ -800,12 +819,12 @@ class AIChatPyQt(QMainWindow):
         folder_buttons.addWidget(self.new_folder_button)
         folder_buttons.addWidget(self.rename_folder_button)
         folder_layout.addLayout(folder_buttons)
-        conversation_layout.addWidget(folder_section)
+        conversation_layout.addWidget(self.folder_section)
         
         # 标签管理区域
-        tag_section = QWidget()
-        tag_section.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
-        tag_layout = QVBoxLayout(tag_section)
+        self.tag_section = QWidget()
+        self.tag_section.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
+        tag_layout = QVBoxLayout(self.tag_section)
         tag_layout.setContentsMargins(5, 5, 5, 5)
         tag_layout.setSpacing(3)
         
@@ -848,7 +867,7 @@ class AIChatPyQt(QMainWindow):
         tag_buttons.addWidget(self.add_tag_button)
         tag_buttons.addWidget(self.remove_tag_button)
         tag_layout.addLayout(tag_buttons)
-        conversation_layout.addWidget(tag_section)
+        conversation_layout.addWidget(self.tag_section)
         
         # 当前对话标签显示
         current_tags_label = QLabel("当前对话标签:")
@@ -1111,7 +1130,8 @@ class AIChatPyQt(QMainWindow):
         self.conversation_history.append({
             "id": message_id,
             "role": "user", 
-            "content": message
+            "content": message,
+            "timestamp": datetime.now().isoformat()
         })
         
         # 自动保存对话历史
@@ -1174,7 +1194,8 @@ class AIChatPyQt(QMainWindow):
         self.conversation_history.append({
             "id": message_id,
             "role": role,
-            "content": message
+            "content": message,
+            "timestamp": datetime.now().isoformat()
         })
         
         # 打印对话历史用于调试
@@ -1420,8 +1441,286 @@ class AIChatPyQt(QMainWindow):
 - 对话管理功能，支持标签和文件夹分类
 - 深色主题默认启动
 - 优化的按钮设计和布局
-- 增强的用户体验"""
+- 增强的用户体验
+- 统计报告功能，支持多种统计指标和图表"""
         QMessageBox.information(self, "关于", about_text)
+    
+    def show_statistics_report(self):
+        """显示统计报告对话框"""
+        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget, 
+                                   QLabel, QTextEdit, QPushButton, QSplitter, QGroupBox,
+                                   QGridLayout, QScrollArea)
+        import pyqtgraph as pg
+        import numpy as np
+        
+        # 创建对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("统计报告")
+        dialog.setMinimumSize(800, 600)
+        
+        # 主布局
+        main_layout = QVBoxLayout(dialog)
+        
+        # 标签页
+        tab_widget = QTabWidget()
+        main_layout.addWidget(tab_widget)
+        
+        # 获取统计数据
+        stats = self.statistics_manager.get_all_statistics()
+        
+        # 1. 概览标签页
+        overview_tab = QWidget()
+        overview_layout = QVBoxLayout(overview_tab)
+        
+        # 滚动区域
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(scroll_widget)
+        overview_layout.addWidget(scroll_area)
+        
+        # 生成统计报告文本
+        report_text = self.statistics_manager.generate_statistics_report()
+        
+        # 报告文本编辑框
+        report_edit = QTextEdit()
+        report_edit.setPlainText(report_text)
+        report_edit.setReadOnly(True)
+        report_edit.setFont(QFont("Courier New", 9))
+        scroll_layout.addWidget(report_edit)
+        
+        tab_widget.addTab(overview_tab, "概览")
+        
+        # 2. 对话统计标签页
+        conversation_tab = QWidget()
+        conversation_layout = QVBoxLayout(conversation_tab)
+        
+        # 对话统计分组
+        conversation_group = QGroupBox("对话统计")
+        conversation_group_layout = QGridLayout(conversation_group)
+        
+        # 总对话数
+        total_conv_label = QLabel(f"总对话数: {stats['conversation_stats']['total_conversations']}")
+        conversation_group_layout.addWidget(total_conv_label, 0, 0)
+        
+        conversation_layout.addWidget(conversation_group)
+        
+        # 按文件夹统计图表
+        folder_stats = stats['conversation_stats']['folder_stats']
+        if folder_stats:
+            folder_group = QGroupBox("按文件夹统计")
+            folder_group_layout = QVBoxLayout(folder_group)
+            
+            # 创建条形图
+            folder_plot = pg.PlotWidget(title="按文件夹统计")
+            folders = list(folder_stats.keys())
+            counts = list(folder_stats.values())
+            
+            # 设置坐标点
+            x = np.arange(len(folders))
+            # 使用单一颜色字符串作为brush参数
+            bar_graph = pg.BarGraphItem(x=x, height=counts, width=0.6, brush='#0078d4')
+            folder_plot.addItem(bar_graph)
+            
+            # 设置X轴刻度
+            folder_plot.setXRange(-0.5, len(folders) - 0.5)
+            folder_plot.getAxis('bottom').setTicks([[(i, folder) for i, folder in enumerate(folders)]])
+            folder_plot.setLabel('left', '对话数量')
+            
+            folder_group_layout.addWidget(folder_plot)
+            conversation_layout.addWidget(folder_group)
+        
+        # 按标签统计图表
+        tag_stats = stats['conversation_stats']['tag_stats']
+        if tag_stats:
+            tag_group = QGroupBox("按标签统计")
+            tag_group_layout = QVBoxLayout(tag_group)
+            
+            # 创建饼图
+            tag_plot = pg.PlotWidget(title="按标签统计")
+            tags = list(tag_stats.keys())
+            counts = list(tag_stats.values())
+            
+            # 创建饼图
+            pie_item = pg.PieChartItem(sizes=counts, labels=tags)
+            tag_plot.addItem(pie_item)
+            
+            tag_group_layout.addWidget(tag_plot)
+            conversation_layout.addWidget(tag_group)
+        
+        tab_widget.addTab(conversation_tab, "对话统计")
+        
+        # 3. 消息统计标签页
+        message_tab = QWidget()
+        message_layout = QVBoxLayout(message_tab)
+        
+        # 消息统计分组
+        message_group = QGroupBox("消息统计")
+        message_group_layout = QGridLayout(message_group)
+        
+        # 总消息数
+        total_msg_label = QLabel(f"总消息数: {stats['message_stats']['total_messages']}")
+        message_group_layout.addWidget(total_msg_label, 0, 0)
+        
+        # 用户消息数
+        user_msg_label = QLabel(f"用户消息数: {stats['message_stats']['user_messages']}")
+        message_group_layout.addWidget(user_msg_label, 0, 1)
+        
+        # AI消息数
+        ai_msg_label = QLabel(f"AI消息数: {stats['message_stats']['assistant_messages']}")
+        message_group_layout.addWidget(ai_msg_label, 1, 0)
+        
+        # 消息比例
+        ratio_label = QLabel(f"消息比例(用户:AI): {stats['message_stats']['message_ratio']:.2f}:1")
+        message_group_layout.addWidget(ratio_label, 1, 1)
+        
+        message_layout.addWidget(message_group)
+        
+        # 消息统计图表
+        msg_chart_group = QGroupBox("消息分布")
+        msg_chart_layout = QVBoxLayout(msg_chart_group)
+        
+        msg_plot = pg.PlotWidget(title="消息分布")
+        msg_types = ['用户消息', 'AI消息']
+        msg_counts = [stats['message_stats']['user_messages'], stats['message_stats']['assistant_messages']]
+        
+        x = np.arange(len(msg_types))
+        # 使用颜色字符串列表作为brushes参数（注意复数形式）
+        bar_graph = pg.BarGraphItem(x=x, height=msg_counts, width=0.6, brushes=['#0078d4', '#00b7c3'])
+        msg_plot.addItem(bar_graph)
+        
+        msg_plot.setXRange(-0.5, len(msg_types) - 0.5)
+        msg_plot.getAxis('bottom').setTicks([[(i, msg_type) for i, msg_type in enumerate(msg_types)]])
+        msg_plot.setLabel('left', '消息数量')
+        
+        msg_chart_layout.addWidget(msg_plot)
+        message_layout.addWidget(msg_chart_group)
+        
+        tab_widget.addTab(message_tab, "消息统计")
+        
+        # 4. 响应时间标签页
+        response_time_tab = QWidget()
+        response_time_layout = QVBoxLayout(response_time_tab)
+        
+        # 响应时间统计分组
+        rt_group = QGroupBox("响应时间统计")
+        rt_group_layout = QGridLayout(rt_group)
+        
+        # 平均响应时间
+        avg_rt_label = QLabel(f"平均响应时间: {stats['response_time_stats']['average_response_time']:.2f}秒")
+        rt_group_layout.addWidget(avg_rt_label, 0, 0)
+        
+        # 中位数响应时间
+        median_rt_label = QLabel(f"中位数响应时间: {stats['response_time_stats']['median_response_time']:.2f}秒")
+        rt_group_layout.addWidget(median_rt_label, 0, 1)
+        
+        # 最短响应时间
+        min_rt_label = QLabel(f"最短响应时间: {stats['response_time_stats']['min_response_time']:.2f}秒")
+        rt_group_layout.addWidget(min_rt_label, 1, 0)
+        
+        # 最长响应时间
+        max_rt_label = QLabel(f"最长响应时间: {stats['response_time_stats']['max_response_time']:.2f}秒")
+        rt_group_layout.addWidget(max_rt_label, 1, 1)
+        
+        response_time_layout.addWidget(rt_group)
+        
+        # 响应时间分布图表
+        response_times = stats['response_time_stats']['response_times']
+        if response_times:
+            rt_dist_group = QGroupBox("响应时间分布")
+            rt_dist_layout = QVBoxLayout(rt_dist_group)
+            
+            rt_dist_plot = pg.PlotWidget(title="响应时间分布")
+            
+            # 创建直方图
+            y, x = np.histogram(response_times, bins=20)
+            curve = pg.PlotCurveItem(x, y, stepMode=True, fillLevel=0, brush='#0078d4')
+            rt_dist_plot.addItem(curve)
+            
+            rt_dist_plot.setLabel('bottom', '响应时间(秒)')
+            rt_dist_plot.setLabel('left', '频率')
+            
+            rt_dist_layout.addWidget(rt_dist_plot)
+            response_time_layout.addWidget(rt_dist_group)
+        
+        tab_widget.addTab(response_time_tab, "响应时间")
+        
+        # 5. 活跃度标签页
+        activity_tab = QWidget()
+        activity_layout = QVBoxLayout(activity_tab)
+        
+        # 活跃度统计分组
+        activity_group = QGroupBox("活跃度统计")
+        activity_group_layout = QGridLayout(activity_group)
+        
+        # 活跃日期数
+        active_days_label = QLabel(f"活跃日期数: {len(stats['activity_stats']['dates'])}")
+        activity_group_layout.addWidget(active_days_label, 0, 0)
+        
+        activity_layout.addWidget(activity_group)
+        
+        # 活跃度趋势图表
+        dates = stats['activity_stats']['dates']
+        counts = stats['activity_stats']['counts']
+        if dates and counts:
+            activity_trend_group = QGroupBox("活跃度趋势")
+            activity_trend_layout = QVBoxLayout(activity_trend_group)
+            
+            activity_plot = pg.PlotWidget(title="活跃度趋势")
+            
+            # 创建折线图
+            x = np.arange(len(dates))
+            curve = pg.PlotCurveItem(x, counts, pen='#0078d4', width=2)
+            scatter = pg.ScatterPlotItem(x=x, y=counts, pen='#0078d4', brush='#0078d4')
+            activity_plot.addItem(curve)
+            activity_plot.addItem(scatter)
+            
+            # 设置X轴刻度（每隔几个日期显示一个，避免拥挤）
+            tick_interval = max(1, len(dates) // 10)  # 最多显示10个刻度
+            ticks = [(i, date) for i, date in enumerate(dates) if i % tick_interval == 0 or i == len(dates) - 1]
+            activity_plot.getAxis('bottom').setTicks([ticks])
+            activity_plot.setLabel('left', '对话数量')
+            activity_plot.setLabel('bottom', '日期')
+            
+            activity_trend_layout.addWidget(activity_plot)
+            activity_layout.addWidget(activity_trend_group)
+        
+        tab_widget.addTab(activity_tab, "活跃度")
+        
+        # 底部按钮布局
+        button_layout = QHBoxLayout()
+        main_layout.addLayout(button_layout)
+        
+        # 导出按钮
+        export_button = QPushButton("导出统计报告")
+        export_button.clicked.connect(lambda: self.export_statistics_data())
+        button_layout.addWidget(export_button)
+        
+        # 关闭按钮
+        close_button = QPushButton("关闭")
+        close_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_button)
+        button_layout.addStretch()
+        
+        # 显示对话框
+        dialog.exec()
+    
+    def export_statistics_data(self):
+        """导出统计数据"""
+        from PyQt6.QtWidgets import QFileDialog
+        
+        # 打开文件保存对话框
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "导出统计数据", f"statistics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "JSON文件 (*.json)"
+        )
+        
+        if filename:
+            try:
+                self.statistics_manager.export_statistics(filename)
+                QMessageBox.information(self, "成功", f"统计数据已导出到 {filename}！")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"导出统计数据失败: {str(e)}")
     
     def load_folders(self):
         """加载文件夹列表"""
@@ -2041,6 +2340,30 @@ class AIChatPyQt(QMainWindow):
             self.debug_info.setStyleSheet(f"background-color: {theme['debug_bg']}; color: {theme['debug_text']};")
         if hasattr(self, 'input_text'):
             self.input_text.setStyleSheet(f"background-color: {theme['input_bg']}; color: {theme['input_text']};")
+        
+        # 应用模型信息框样式
+        if hasattr(self, 'model_switcher'):
+            self.model_switcher.setStyleSheet(
+                f"background-color: {theme['secondary']}; border: 1px solid {theme['border']}; border-radius: 3px;"
+            )
+        
+        # 应用列表组件样式
+        list_widgets = ['folder_list', 'tag_list', 'conversation_list', 'current_tags_list']
+        for widget_name in list_widgets:
+            if hasattr(self, widget_name):
+                widget = getattr(self, widget_name)
+                widget.setStyleSheet(
+                    f"background-color: {theme['input_bg']}; color: {theme['input_text']}; border: 1px solid {theme['border']}; border-radius: 2px;"
+                )
+        
+        # 应用分组区域样式
+        section_widgets = ['folder_section', 'tag_section']
+        for widget_name in section_widgets:
+            if hasattr(self, widget_name):
+                widget = getattr(self, widget_name)
+                widget.setStyleSheet(
+                    f"background-color: {theme['secondary']}; border: 1px solid {theme['border']}; border-radius: 3px;"
+                )
     
     def save_theme_prefs(self):
         """保存主题偏好"""
