@@ -441,9 +441,17 @@ class AIChatPyQt(QMainWindow):
         QTimer.singleShot(2000, self.splash.start_fade_out)
     
     def write_audit_log(self, actor, action, details):
-        """写入审计日志"""
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"[{timestamp}] 执行者: {actor} | 操作: {action} | 详情: {details}\n"
+        """写入审计日志，记录更详细的操作信息"""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # 精确到毫秒
+        
+        # 添加当前模型信息
+        current_model_info = f"当前模型: {self.current_model_name if hasattr(self, 'current_model_name') else '未配置'}"
+        
+        # 添加对话ID信息
+        conversation_info = f"对话ID: {self.current_conversation_id if hasattr(self, 'current_conversation_id') else '无'}"
+        
+        # 构建完整日志条目
+        log_entry = f"[{timestamp}] 执行者: {actor} | 操作: {action} | {current_model_info} | {conversation_info} | 详情: {details}\n"
         
         # 写入日志文件
         with open(self.audit_log_file, "a", encoding="utf-8") as f:
