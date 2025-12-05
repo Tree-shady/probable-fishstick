@@ -538,31 +538,10 @@ class AIChatPyQt(QMainWindow):
         # 主题配置相关变量
         self.themes_file = 'themes.json'
         self.themes = self.load_themes()
-        self.current_theme = self.config.get('current_theme', 'light')
+        self.current_theme = self.config.get('current_theme', 'dark')
         self.theme_prefs_file = 'theme_prefs.json'
         
-        # 设置全局样式，确保消息框字体清晰可见
-        app = QApplication.instance()
-        app.setStyleSheet(
-            "QMessageBox { "
-            "    background-color: white; "
-            "    color: black; "
-            "}"
-            "QMessageBox QLabel { "
-            "    color: black; "
-            "    font-weight: normal; "
-            "}"
-            "QMessageBox QPushButton { "
-            "    background-color: #0078d4; "
-            "    color: white; "
-            "    border: none; "
-            "    padding: 5px 15px; "
-            "    border-radius: 2px; "
-            "}"
-            "QMessageBox QPushButton:hover { "
-            "    background-color: #106ebe; "
-            "}"
-        )
+        # 全局样式将在apply_theme方法中根据主题设置
         
         # 创建中心部件
         central_widget = QWidget()
@@ -759,15 +738,173 @@ class AIChatPyQt(QMainWindow):
     
     def create_chat_history(self, layout):
         """创建对话历史区域"""
-        # 创建分割器，左侧显示调试信息，右侧显示对话历史
+        # 创建主分割器，左侧显示对话管理，右侧显示对话内容
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         layout.addWidget(main_splitter, 1)
         
-        # 左侧容器，用于包含模型切换和调试信息
-        left_container = QWidget()
-        left_layout = QVBoxLayout(left_container)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(5)
+        # 左侧对话管理区域
+        conversation_container = QWidget()
+        conversation_layout = QVBoxLayout(conversation_container)
+        conversation_layout.setContentsMargins(0, 0, 0, 0)
+        conversation_layout.setSpacing(5)
+        
+        # 对话管理标题
+        conv_title = QLabel("对话管理")
+        conv_title.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        conv_title.setStyleSheet("background-color: #0078d4; color: white; padding: 5px; border-radius: 3px;")
+        conversation_layout.addWidget(conv_title)
+        
+        # 文件夹管理区域
+        folder_section = QWidget()
+        folder_section.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
+        folder_layout = QVBoxLayout(folder_section)
+        folder_layout.setContentsMargins(5, 5, 5, 5)
+        folder_layout.setSpacing(3)
+        
+        folder_title = QLabel("文件夹")
+        folder_title.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+        folder_title.setStyleSheet("color: #0078d4;")
+        folder_layout.addWidget(folder_title)
+        
+        # 文件夹列表
+        self.folder_list = QListWidget()
+        self.folder_list.setMaximumHeight(100)
+        self.folder_list.itemClicked.connect(self.on_folder_clicked)
+        folder_layout.addWidget(self.folder_list)
+        
+        # 文件夹操作按钮
+        folder_buttons = QHBoxLayout()
+        
+        # 新建文件夹按钮
+        self.new_folder_button = QPushButton("新建")
+        self.new_folder_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
+        self.new_folder_button.setFixedSize(65, 30)
+        self.new_folder_button.setStyleSheet(
+            "QPushButton { background-color: #0078d4; color: white; border: none; border-radius: 3px; }"
+            "QPushButton:hover { background-color: #106ebe; }"
+            "QPushButton:pressed { background-color: #005a9e; }"
+        )
+        self.new_folder_button.clicked.connect(self.create_new_folder)
+        
+        # 重命名文件夹按钮
+        self.rename_folder_button = QPushButton("重命名")
+        self.rename_folder_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
+        self.rename_folder_button.setFixedSize(65, 30)
+        self.rename_folder_button.setStyleSheet(
+            "QPushButton { background-color: #6c757d; color: white; border: none; border-radius: 3px; }"
+            "QPushButton:hover { background-color: #5a6268; }"
+            "QPushButton:pressed { background-color: #545b62; }"
+        )
+        self.rename_folder_button.clicked.connect(self.rename_folder)
+        
+        folder_buttons.addWidget(self.new_folder_button)
+        folder_buttons.addWidget(self.rename_folder_button)
+        folder_layout.addLayout(folder_buttons)
+        conversation_layout.addWidget(folder_section)
+        
+        # 标签管理区域
+        tag_section = QWidget()
+        tag_section.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
+        tag_layout = QVBoxLayout(tag_section)
+        tag_layout.setContentsMargins(5, 5, 5, 5)
+        tag_layout.setSpacing(3)
+        
+        tag_title = QLabel("标签")
+        tag_title.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+        tag_title.setStyleSheet("color: #0078d4;")
+        tag_layout.addWidget(tag_title)
+        
+        # 标签列表
+        self.tag_list = QListWidget()
+        self.tag_list.setMaximumHeight(100)
+        self.tag_list.itemClicked.connect(self.on_tag_clicked)
+        tag_layout.addWidget(self.tag_list)
+        
+        # 标签操作按钮
+        tag_buttons = QHBoxLayout()
+        
+        # 添加标签按钮
+        self.add_tag_button = QPushButton("添加")
+        self.add_tag_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
+        self.add_tag_button.setFixedSize(50, 30)
+        self.add_tag_button.setStyleSheet(
+            "QPushButton { background-color: #28a745; color: white; border: none; border-radius: 3px; }"
+            "QPushButton:hover { background-color: #218838; }"
+            "QPushButton:pressed { background-color: #1e7e34; }"
+        )
+        self.add_tag_button.clicked.connect(self.add_tag_to_conversation)
+        
+        # 移除标签按钮
+        self.remove_tag_button = QPushButton("移除")
+        self.remove_tag_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
+        self.remove_tag_button.setFixedSize(50, 30)
+        self.remove_tag_button.setStyleSheet(
+            "QPushButton { background-color: #dc3545; color: white; border: none; border-radius: 3px; }"
+            "QPushButton:hover { background-color: #c82333; }"
+            "QPushButton:pressed { background-color: #bd2130; }"
+        )
+        self.remove_tag_button.clicked.connect(self.remove_tag_from_conversation)
+        
+        tag_buttons.addWidget(self.add_tag_button)
+        tag_buttons.addWidget(self.remove_tag_button)
+        tag_layout.addLayout(tag_buttons)
+        conversation_layout.addWidget(tag_section)
+        
+        # 当前对话标签显示
+        current_tags_label = QLabel("当前对话标签:")
+        current_tags_label.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+        conversation_layout.addWidget(current_tags_label)
+        
+        self.current_tags_list = QListWidget()
+        self.current_tags_list.setMaximumHeight(50)
+        conversation_layout.addWidget(self.current_tags_list)
+        
+        # 对话列表区域
+        conv_list_title = QLabel("对话列表")
+        conv_list_title.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+        conv_list_title.setStyleSheet("color: #0078d4;")
+        conversation_layout.addWidget(conv_list_title)
+        
+        self.conversation_list = QListWidget()
+        self.conversation_list.itemClicked.connect(self.on_conversation_clicked)
+        self.conversation_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.conversation_list.customContextMenuRequested.connect(self.show_conversation_context_menu)
+        conversation_layout.addWidget(self.conversation_list, 1)
+        
+        # 批量操作按钮
+        batch_layout = QHBoxLayout()
+        
+        # 全选按钮
+        self.select_all_button = QPushButton("全选")
+        self.select_all_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
+        self.select_all_button.setFixedSize(50, 30)
+        self.select_all_button.setStyleSheet(
+            "QPushButton { background-color: #17a2b8; color: white; border: none; border-radius: 3px; }"
+            "QPushButton:hover { background-color: #138496; }"
+            "QPushButton:pressed { background-color: #117a8b; }"
+        )
+        self.select_all_button.clicked.connect(self.select_all_conversations)
+        
+        # 批量删除按钮
+        self.batch_delete_button = QPushButton("批量删除")
+        self.batch_delete_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
+        self.batch_delete_button.setFixedSize(65, 30)
+        self.batch_delete_button.setStyleSheet(
+            "QPushButton { background-color: #dc3545; color: white; border: none; border-radius: 3px; }"
+            "QPushButton:hover { background-color: #c82333; }"
+            "QPushButton:pressed { background-color: #bd2130; }"
+        )
+        self.batch_delete_button.clicked.connect(self.batch_delete_conversations)
+        
+        batch_layout.addWidget(self.select_all_button)
+        batch_layout.addWidget(self.batch_delete_button)
+        conversation_layout.addLayout(batch_layout)
+        
+        # 模型信息和调试区域
+        info_container = QWidget()
+        info_layout = QVBoxLayout(info_container)
+        info_layout.setContentsMargins(5, 5, 5, 5)
+        info_layout.setSpacing(5)
         
         # 模型切换信息框
         self.model_switcher = QWidget()
@@ -791,7 +928,7 @@ class AIChatPyQt(QMainWindow):
         # 模型切换按钮
         switch_button = QPushButton("切换模型")
         switch_button.setFont(QFont("Arial", 8, QFont.Weight.Medium))
-        switch_button.setFixedHeight(25)
+        switch_button.setFixedHeight(30)
         switch_button.setStyleSheet("background-color: #0078d4; color: white; border: none; border-radius: 2px;")
         switch_button.clicked.connect(self.show_model_switcher)
         model_layout.addWidget(switch_button)
@@ -799,13 +936,12 @@ class AIChatPyQt(QMainWindow):
         # 配置模型按钮
         config_button = QPushButton("配置模型")
         config_button.setFont(QFont("Arial", 8, QFont.Weight.Medium))
-        config_button.setFixedHeight(25)
+        config_button.setFixedHeight(30)
         config_button.setStyleSheet("background-color: #6c757d; color: white; border: none; border-radius: 2px;")
         config_button.clicked.connect(self.open_config_dialog)
         model_layout.addWidget(config_button)
         
-        # 将模型切换信息框添加到左侧布局
-        left_layout.addWidget(self.model_switcher)
+        info_layout.addWidget(self.model_switcher)
         
         # 调试信息区域
         self.debug_info = QTextEdit()
@@ -813,13 +949,15 @@ class AIChatPyQt(QMainWindow):
         self.debug_info.setFont(QFont("Courier New", 10))
         self.debug_info.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.debug_info.setPlaceholderText("调试信息将显示在这里...")
-        self.debug_info.setMinimumWidth(200)  # 进一步减小最小宽度
+        info_layout.addWidget(self.debug_info, 1)
         
-        # 将调试信息添加到左侧布局
-        left_layout.addWidget(self.debug_info, 1)  # 占据剩余空间
+        # 左侧分割器（对话管理 + 模型调试）
+        left_splitter = QSplitter(Qt.Orientation.Vertical)
+        left_splitter.addWidget(conversation_container)
+        left_splitter.addWidget(info_container)
+        left_splitter.setSizes([300, 200])
         
-        # 将左侧容器添加到分割器
-        main_splitter.addWidget(left_container)
+        main_splitter.addWidget(left_splitter)
         
         # 右侧容器，用于包含对话历史
         right_container = QWidget()
@@ -868,8 +1006,18 @@ class AIChatPyQt(QMainWindow):
         self.search_results = []
         self.current_search_index = -1
         
+        # 对话管理相关变量
+        self.current_folder = "default"
+        self.selected_tags = []
+        
+        # 加载对话列表和文件夹
+        self.load_folders()
+        self.load_tags()
+        self.load_conversations()
+        self.update_current_tags()
+        
         # 设置分割器初始比例
-        main_splitter.setSizes([200, 800])
+        main_splitter.setSizes([300, 900])
     
     def create_input_area(self, layout):
         """创建输入区域"""
@@ -1263,11 +1411,220 @@ class AIChatPyQt(QMainWindow):
         """显示关于信息"""
         about_text = """AI对话软件
 
-版本：1.0
+版本：2.2.0
 
 支持自定义API大模型的对话软件，
-可以配置不同的API URL、API密钥和模型。"""
+可以配置不同的API URL、API密钥和模型。
+
+最近更新：
+- 对话管理功能，支持标签和文件夹分类
+- 深色主题默认启动
+- 优化的按钮设计和布局
+- 增强的用户体验"""
         QMessageBox.information(self, "关于", about_text)
+    
+    def load_folders(self):
+        """加载文件夹列表"""
+        self.folder_list.clear()
+        folders = self.conversation_manager.get_folders()
+        for folder in folders:
+            self.folder_list.addItem(folder)
+    
+    def load_tags(self):
+        """加载标签列表"""
+        self.tag_list.clear()
+        tags = self.conversation_manager.get_tags()
+        for tag in tags:
+            self.tag_list.addItem(tag)
+    
+    def load_conversations(self):
+        """加载对话列表"""
+        self.conversation_list.clear()
+        conversations = self.conversation_manager.get_conversations(
+            folder=self.current_folder, 
+            tags=self.selected_tags
+        )
+        for conv in conversations:
+            self.conversation_list.addItem(conv["title"])
+            item = self.conversation_list.item(self.conversation_list.count() - 1)
+            item.setData(Qt.ItemDataRole.UserRole, conv["id"])
+    
+    def update_current_tags(self):
+        """更新当前对话标签显示"""
+        self.current_tags_list.clear()
+        if self.current_conversation_id:
+            conv = self.conversation_manager.conversations.get(self.current_conversation_id)
+            if conv and "tags" in conv:
+                for tag in conv["tags"]:
+                    self.current_tags_list.addItem(tag)
+    
+    def on_folder_clicked(self, item):
+        """文件夹点击事件"""
+        self.current_folder = item.text()
+        self.load_conversations()
+    
+    def on_tag_clicked(self, item):
+        """标签点击事件"""
+        tag = item.text()
+        if tag in self.selected_tags:
+            self.selected_tags.remove(tag)
+            item.setCheckState(Qt.CheckState.Unchecked)
+        else:
+            self.selected_tags.append(tag)
+            item.setCheckState(Qt.CheckState.Checked)
+        self.load_conversations()
+    
+    def on_conversation_clicked(self, item):
+        """对话点击事件"""
+        conversation_id = item.data(Qt.ItemDataRole.UserRole)
+        if conversation_id != self.current_conversation_id:
+            # 保存当前对话
+            if self.current_conversation_id:
+                self.save_history_auto()
+            
+            # 加载选中的对话
+            self.current_conversation_id = conversation_id
+            self.conversation_history = self.conversation_manager.load_conversation(conversation_id)
+            self.message_counter = max(int(msg["id"].split("_")[1]) for msg in self.conversation_history) + 1 if self.conversation_history else 0
+            
+            # 更新聊天窗口
+            self.load_history_to_chat()
+            
+            # 更新当前标签显示
+            self.update_current_tags()
+    
+    def show_conversation_context_menu(self, pos):
+        """对话右键菜单"""
+        menu = QMenu(self)
+        
+        # 重命名对话
+        rename_action = QAction("重命名", self)
+        rename_action.triggered.connect(lambda: self.rename_conversation_context(pos))
+        menu.addAction(rename_action)
+        
+        # 删除对话
+        delete_action = QAction("删除", self)
+        delete_action.triggered.connect(lambda: self.delete_conversation_context(pos))
+        menu.addAction(delete_action)
+        
+        # 移动到文件夹
+        move_menu = QMenu("移动到文件夹", self)
+        folders = self.conversation_manager.get_folders()
+        for folder in folders:
+            move_action = QAction(folder, self)
+            move_action.triggered.connect(lambda checked, f=folder, p=pos: self.move_conversation_to_folder_context(p, f))
+            move_menu.addAction(move_action)
+        menu.addMenu(move_menu)
+        
+        menu.exec(self.conversation_list.mapToGlobal(pos))
+    
+    def rename_conversation_context(self, pos):
+        """重命名对话上下文菜单处理"""
+        item = self.conversation_list.itemAt(pos)
+        if item:
+            conversation_id = item.data(Qt.ItemDataRole.UserRole)
+            new_title, ok = QInputDialog.getText(self, "重命名对话", "请输入新的对话标题:", text=item.text())
+            if ok and new_title.strip():
+                self.conversation_manager.rename_conversation(conversation_id, new_title.strip())
+                item.setText(new_title.strip())
+    
+    def delete_conversation_context(self, pos):
+        """删除对话上下文菜单处理"""
+        item = self.conversation_list.itemAt(pos)
+        if item:
+            conversation_id = item.data(Qt.ItemDataRole.UserRole)
+            if QMessageBox.question(self, "确认", "确定要删除这个对话吗？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+                self.conversation_manager.delete_conversation(conversation_id)
+                self.conversation_list.takeItem(self.conversation_list.row(item))
+                if conversation_id == self.current_conversation_id:
+                    self.new_conversation()
+    
+    def move_conversation_to_folder_context(self, pos, folder):
+        """移动对话到文件夹上下文菜单处理"""
+        item = self.conversation_list.itemAt(pos)
+        if item:
+            conversation_id = item.data(Qt.ItemDataRole.UserRole)
+            self.conversation_manager.move_to_folder(conversation_id, folder)
+            if folder != self.current_folder:
+                self.conversation_list.takeItem(self.conversation_list.row(item))
+    
+    def select_all_conversations(self):
+        """全选对话"""
+        for i in range(self.conversation_list.count()):
+            self.conversation_list.item(i).setSelected(True)
+    
+    def batch_delete_conversations(self):
+        """批量删除对话"""
+        selected_items = self.conversation_list.selectedItems()
+        if not selected_items:
+            QMessageBox.information(self, "提示", "请先选择要删除的对话！")
+            return
+        
+        if QMessageBox.question(self, "确认", f"确定要删除选中的 {len(selected_items)} 个对话吗？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            for item in selected_items:
+                conversation_id = item.data(Qt.ItemDataRole.UserRole)
+                self.conversation_manager.delete_conversation(conversation_id)
+                self.conversation_list.takeItem(self.conversation_list.row(item))
+                if conversation_id == self.current_conversation_id:
+                    self.new_conversation()
+    
+    def create_new_folder(self):
+        """创建新文件夹"""
+        folder_name, ok = QInputDialog.getText(self, "创建文件夹", "请输入文件夹名称:")
+        if ok and folder_name.strip():
+            # 检查文件夹是否已存在
+            folders = self.conversation_manager.get_folders()
+            if folder_name.strip() in folders:
+                QMessageBox.warning(self, "错误", "文件夹已存在！")
+                return
+            
+            # 创建一个空对话来初始化文件夹
+            self.conversation_manager.create_conversation(title="新建对话", folder=folder_name.strip())
+            self.load_folders()
+    
+    def rename_folder(self):
+        """重命名文件夹"""
+        if self.current_folder == "default":
+            QMessageBox.warning(self, "错误", "默认文件夹不能重命名！")
+            return
+        
+        new_name, ok = QInputDialog.getText(self, "重命名文件夹", "请输入新的文件夹名称:", text=self.current_folder)
+        if ok and new_name.strip():
+            # 更新所有该文件夹下的对话
+            conversations = self.conversation_manager.get_conversations(folder=self.current_folder)
+            for conv in conversations:
+                self.conversation_manager.move_to_folder(conv["id"], new_name.strip())
+            self.current_folder = new_name.strip()
+            self.load_folders()
+    
+    def add_tag_to_conversation(self):
+        """为对话添加标签"""
+        if not self.current_conversation_id:
+            QMessageBox.warning(self, "错误", "请先选择一个对话！")
+            return
+        
+        tag, ok = QInputDialog.getText(self, "添加标签", "请输入标签名称:")
+        if ok and tag.strip():
+            self.conversation_manager.add_tag(self.current_conversation_id, tag.strip())
+            self.load_tags()
+            self.update_current_tags()
+    
+    def remove_tag_from_conversation(self):
+        """从对话移除标签"""
+        if not self.current_conversation_id:
+            QMessageBox.warning(self, "错误", "请先选择一个对话！")
+            return
+        
+        conv = self.conversation_manager.conversations.get(self.current_conversation_id)
+        if not conv or not conv.get("tags"):
+            QMessageBox.warning(self, "错误", "当前对话没有标签！")
+            return
+        
+        tag, ok = QInputDialog.getItem(self, "移除标签", "请选择要移除的标签:", conv["tags"], 0, False)
+        if ok and tag:
+            self.conversation_manager.remove_tag(self.current_conversation_id, tag)
+            self.load_tags()
+            self.update_current_tags()
     
     def save_history(self):
         """保存对话历史到文件"""
@@ -1726,7 +2083,7 @@ class AIChatPyQt(QMainWindow):
         # 创建对话框
         dialog = QDialog(self)
         dialog.setWindowTitle("切换模型")
-        dialog.setFixedSize(350, 250)
+        dialog.setFixedSize(400, 250)
         
         # 创建布局
         layout = QVBoxLayout(dialog)
