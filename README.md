@@ -65,6 +65,7 @@ AI对话软件是一个功能强大、灵活易用的Python对话工具，支持
 - ✅ 对话历史记录
 - ✅ 命令行界面，简单易用
 - ✅ 图形界面（GUI），可视化操作
+- ✅ Web版本，支持浏览器访问
 - ✅ 启动动画效果
 - ✅ 配置自动保存
 - ✅ 消息时间戳和彩色显示
@@ -101,9 +102,12 @@ AI对话软件是一个功能强大、灵活易用的Python对话工具，支持
 - ✅ 对话管理和模型信息框与主题一致
 - ✅ 优化左侧按钮设计，解决字体显示问题
 - ✅ 增大切换模型和配置模型按钮高度
+- ✅ Web版本配置同步，与桌面版共享配置文件
+- ✅ Web版本模型切换功能，支持多模型管理
 
 ## 技术栈
 
+### 核心技术栈
 - **开发语言**：Python 3.7+
 - **依赖库**：
   - requests：用于HTTP请求
@@ -112,6 +116,20 @@ AI对话软件是一个功能强大、灵活易用的Python对话工具，支持
   - networkx：用于图论算法
   - numpy：用于数值计算
   - colorama：用于终端颜色输出
+
+### Web版本技术栈
+
+**前端**：
+- Vue 3：现代化的JavaScript框架
+- Vite：快速的构建工具
+- Pinia：状态管理库
+- Vue Router：路由管理
+- Axios：HTTP客户端
+
+**后端**：
+- Flask：轻量级Python Web框架
+- Flask-CORS：处理跨域请求
+- Requests：HTTP客户端
 
 ## 安装依赖
 
@@ -160,6 +178,53 @@ python ai_chat_cli.py
 ```bash
 python ai_chat_pyqt.py
 ```
+
+### Web版本
+
+#### 1. 前端开发模式
+
+```bash
+# 进入web目录
+cd web
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+前端开发服务器将运行在 `http://localhost:3000`
+
+#### 2. 构建生产版本
+
+```bash
+# 构建生产版本
+npm run build
+
+# 预览生产构建
+npm run preview
+```
+
+构建产物将生成在 `dist` 目录
+
+#### 3. 启动后端服务
+
+```bash
+# 安装依赖
+pip install flask flask-cors requests
+
+# 启动后端服务（开发模式）
+python backend.py
+
+# 生产模式（禁用调试）
+python backend.py --production
+
+# 或指定端口
+python backend.py --production --port 8000
+```
+
+后端服务默认运行在 `http://localhost:5000`
 
 ## 使用说明
 
@@ -471,6 +536,409 @@ model: deepseek-v3.1
 - 尝试使用不同的API服务进行测试
 - 查看审计日志，了解操作记录
 
+## Web版本生产部署
+
+### 关于Flask开发服务器警告
+
+当你直接运行 `python web/backend.py --production` 时，你可能会看到以下警告：
+```
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+```
+
+**这是正常现象**，因为Flask的内置服务器是为开发环境设计的，不适合生产使用。在实际生产环境中，你应该使用专业的WSGI服务器，如Gunicorn或uWSGI。
+
+### 前端部署
+
+1. **使用Nginx或Apache作为Web服务器**
+   ```nginx
+   server {
+       listen 80;
+       server_name your-domain.com;
+       root /path/to/web/dist;
+       index index.html;
+       
+       location / {
+           try_files $uri $uri/ /index.html;
+       }
+       
+       location /api {
+           proxy_pass http://localhost:5000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           
+           # 增加超时设置
+           proxy_connect_timeout 60s;
+           proxy_read_timeout 60s;
+           proxy_send_timeout 60s;
+       }
+   }
+   ```
+
+2. **使用CDN加速静态资源**
+   - 将构建产物上传到CDN
+   - 配置Nginx从CDN加载静态资源
+
+3. **启用HTTPS**
+   - 使用Let's Encrypt获取免费SSL证书
+   - 在Nginx中配置HTTPS
+   - 强制HTTP重定向到HTTPS
+
+### 后端部署
+
+#### 1. 使用Gunicorn作为WSGI服务器（推荐）
+
+```bash
+# 安装Gunicorn
+pip install gunicorn
+
+# 启动服务（生产模式）
+gunicorn -w 4 -b 0.0.0.0:5000 web/backend:app
+
+# 带超时设置的启动命令
+gunicorn -w 4 -b 0.0.0.0:5000 --timeout 60 web/backend:app
+
+# 带日志配置的启动命令
+gunicorn -w 4 -b 0.0.0.0:5000 --timeout 60 --access-logfile access.log --error-logfile error.log web/backend:app
+```
+
+#### 2. 使用uWSGI作为WSGI服务器
+
+```bash
+# 安装uWSGI
+pip install uwsgi
+
+# 启动服务
+uwsgi --http :5000 --wsgi-file web/backend.py --callable app --processes 4 --threads 2 --timeout 60
+
+# 使用配置文件启动
+# uwsgi.ini
+[uwsgi]
+http = :5000
+wsgi-file = web/backend.py
+callable = app
+processes = 4
+threads = 2
+timeout = 60
+
+# 启动命令
+uwsgi --ini uwsgi.ini
+```
+
+#### 3. 使用systemd管理服务
+
+```ini
+# /etc/systemd/system/ai-chat-backend.service
+[Unit]
+Description=AI Chat Backend Service
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/path/to/ai-chat-software
+ExecStart=/usr/bin/gunicorn -w 4 -b 0.0.0.0:5000 web/backend:app --timeout 60
+Restart=always
+RestartSec=5
+Environment="PATH=/usr/bin:/path/to/venv/bin"
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# 启用并启动服务
+sudo systemctl enable ai-chat-backend
+sudo systemctl start ai-chat-backend
+
+# 查看服务状态
+sudo systemctl status ai-chat-backend
+
+# 查看日志
+sudo journalctl -u ai-chat-backend
+```
+
+#### 4. 使用Docker容器化部署
+
+```dockerfile
+# Dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制应用代码
+COPY web/backend.py .
+
+# 暴露端口
+EXPOSE 5000
+
+# 使用Gunicorn启动服务
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "--timeout", "60", "backend:app"]
+```
+
+```bash
+# 构建镜像
+docker build -t ai-chat-backend .
+
+# 运行容器
+docker run -d -p 5000:5000 --name ai-chat-backend ai-chat-backend
+
+# 查看日志
+docker logs ai-chat-backend
+```
+
+### 推荐的生产部署架构
+
+```
+用户浏览器 → Nginx（前端静态资源 + 反向代理） → Gunicorn/uWSGI → Flask应用
+```
+
+### 生产环境优化建议
+
+1. **调整工作进程数**
+   - 通常设置为CPU核心数的2-4倍
+   - 例如：`gunicorn -w 8 -b 0.0.0.0:5000 web/backend:app`
+
+2. **设置合理的超时时间**
+   - 考虑到AI模型可能需要较长时间生成响应
+   - 建议设置为60秒或更长
+
+3. **启用日志轮替**
+   - 使用logrotate管理Gunicorn/UWSGI日志
+   - 定期归档和清理旧日志
+
+4. **配置监控**
+   - 使用Prometheus + Grafana监控服务状态
+   - 设置告警机制，及时发现问题
+
+5. **使用负载均衡**
+   - 对于高流量场景，使用Nginx或专业负载均衡器
+   - 部署多个后端实例，提高可用性
+
+6. **定期备份**
+   - 备份重要配置和数据
+   - 制定恢复计划
+
+7. **安全加固**
+   - 关闭不必要的端口
+   - 使用防火墙限制访问
+   - 定期更新依赖包
+   - 配置适当的文件权限
+
+## 环境变量配置
+
+### 前端环境变量
+
+在 `web/.env` 文件中配置：
+```
+VITE_API_BASE_URL=http://localhost:5000/api
+```
+
+### 后端环境变量
+
+在 `.env` 文件中配置：
+```
+FLASK_ENV=production
+FLASK_DEBUG=False
+PORT=5000
+HOST=0.0.0.0
+```
+
+## 安全建议
+
+1. **保护API密钥**
+   - 不要将API密钥硬编码到前端代码中
+   - 使用后端服务代理API请求
+   - 定期更换API密钥
+
+2. **启用HTTPS**
+   - 生产环境必须使用HTTPS
+   - 使用Let's Encrypt获取免费SSL证书
+
+3. **限制API访问**
+   - 配置Nginx的IP限制
+   - 使用API密钥验证
+   - 配置访问频率限制
+
+4. **监控和日志**
+   - 配置日志记录
+   - 使用监控工具（如Prometheus + Grafana）
+   - 设置告警机制
+
+## Web版本API接口文档
+
+### 1. 获取配置
+
+**请求方法**：GET
+**请求路径**：/api/config
+**响应格式**：JSON
+**响应示例**：
+```json
+{
+  "config": {
+    "api_url": "https://apis.iflow.cn/v1/chat/completions",
+    "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "model": "deepseek-v3.1",
+    "temperature": 0.7,
+    "max_tokens": 1000
+  },
+  "model_configs": {
+    "deepseek-v3.1": {
+      "api_url": "https://apis.iflow.cn/v1/chat/completions",
+      "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "deepseek-v3.1",
+      "temperature": 0.7,
+      "max_tokens": 1000
+    },
+    "硅基流动": {
+      "api_url": "https://api.siliconflow.cn/v1/chat/completions",
+      "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "deepseek-ai/DeepSeek-R1",
+      "temperature": 0.7,
+      "max_tokens": 1000
+    }
+  }
+}
+```
+
+### 2. 更新配置
+
+**请求方法**：POST
+**请求路径**：/api/config
+**请求格式**：JSON
+**请求示例**：
+```json
+{
+  "config": {
+    "api_url": "https://api.openai.com/v1/chat/completions",
+    "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "model": "gpt-3.5-turbo",
+    "temperature": 0.7,
+    "max_tokens": 1000
+  }
+}
+```
+**响应格式**：JSON
+**响应示例**：
+```json
+{
+  "message": "配置更新成功",
+  "config": {
+    "api_url": "https://api.openai.com/v1/chat/completions",
+    "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "model": "gpt-3.5-turbo",
+    "temperature": 0.7,
+    "max_tokens": 1000
+  }
+}
+```
+
+### 3. 获取模型列表
+
+**请求方法**：GET
+**请求路径**：/api/models
+**响应格式**：JSON
+**响应示例**：
+```json
+{
+  "models": {
+    "deepseek-v3.1": {
+      "api_url": "https://apis.iflow.cn/v1/chat/completions",
+      "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "deepseek-v3.1",
+      "temperature": 0.7,
+      "max_tokens": 1000
+    },
+    "硅基流动": {
+      "api_url": "https://api.siliconflow.cn/v1/chat/completions",
+      "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "model": "deepseek-ai/DeepSeek-R1",
+      "temperature": 0.7,
+      "max_tokens": 1000
+    }
+  }
+}
+```
+
+### 4. 切换模型
+
+**请求方法**：POST
+**请求路径**：/api/models/{model_name}
+**请求示例**：
+```
+POST /api/models/deepseek-v3.1
+```
+**响应格式**：JSON
+**响应示例**：
+```json
+{
+  "message": "已切换到模型: deepseek-v3.1",
+  "config": {
+    "api_url": "https://apis.iflow.cn/v1/chat/completions",
+    "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "model": "deepseek-v3.1",
+    "temperature": 0.7,
+    "max_tokens": 1000
+  }
+}
+```
+
+## Web版本开发指南
+
+### 添加新页面
+
+1. 在 `web/src/views/` 目录下创建新的Vue组件
+2. 在 `web/src/router/index.js` 中添加路由
+3. 在 `web/src/stores/` 中添加对应的状态管理
+
+### 添加新功能
+
+1. 在组件中定义功能
+2. 在store中管理状态
+3. 在后端 `web/backend.py` 中添加对应的API接口（如果需要）
+
+## Web版本常见问题
+
+### 1. 跨域问题
+
+确保后端服务已正确配置CORS，默认配置允许所有来源访问。
+
+### 2. API调用失败
+
+检查：
+- API URL是否正确
+- API密钥是否有效
+- 网络连接是否正常
+- 查看浏览器控制台和后端日志
+
+### 3. 后端服务启动失败
+
+检查：
+- 端口是否被占用
+- 依赖是否已正确安装
+- 查看终端输出的错误信息
+
+### 4. npm命令找不到package.json
+
+确保在web目录下运行npm命令：
+```bash
+# 方法1：先进入web目录
+cd web
+npm run dev
+
+# 方法2：使用--prefix选项
+npm run dev --prefix web
+```
+
 ## 开发说明
 
 ### 项目结构
@@ -491,7 +959,22 @@ ai-chat-software/
 ├── presets/             # 预设和模板存储文件夹
 │   ├── prompts.json     # 角色预设文件
 │   └── templates.json   # 对话模板文件（文件已删除）
-└── logs/                # 审计日志存储文件夹
+├── web/                 # Web版本目录
+    ├── src/             # 前端源代码
+    │   ├── views/       # 页面组件
+    │   │   ├── ChatView.vue      # 聊天界面
+    │   │   └── ConfigView.vue    # 配置界面
+    │   ├── stores/      # 状态管理
+    │   │   ├── chat.js           # 聊天状态管理
+    │   │   └── config.js         # 配置管理
+    │   ├── router/      # 路由配置
+    │   │   └── index.js
+    │   ├── App.vue      # 根组件
+    │   └── main.js      # 入口文件
+    ├── index.html       # HTML入口
+    ├── vite.config.js   # Vite配置
+    ├── package.json     # 前端依赖配置
+    └── backend.py       # Web后端服务
 ```
 
 ### 代码结构
@@ -557,6 +1040,13 @@ MIT License
   - 支持将统计数据导出为JSON格式
   - 支持多种图表类型：柱状图、饼图、直方图、折线图
 
+- **Web版本功能增强**
+  - 实现Web版本配置同步，与桌面版共享配置文件
+  - 实现Web版本模型切换功能，支持多模型管理
+  - 支持从预定义模型列表中选择和应用模型
+  - 实现模型配置预览和应用功能
+  - 支持配置API URL、API密钥、模型名称等参数
+
 - **主题系统优化**
   - 设置深色主题为默认主题
   - 优化主题切换机制，确保所有UI组件与主题一致
@@ -576,12 +1066,20 @@ MIT License
   - 提供直观的图表可视化，便于理解数据趋势
   - 支持导出统计报告，方便保存和分享
 
+- **Web版本UI优化**
+  - 新增模型切换器组件，支持从下拉列表选择模型
+  - 实现加载状态和错误提示，提升用户体验
+  - 优化配置表单，支持实时预览模型配置
+  - 统一按钮样式和尺寸，保持界面一致性
+
 #### 技术优化与修复
 - **代码结构优化**
   - 新增statistics_manager.py模块，实现统计功能
   - 改进apply_theme方法，确保所有UI组件正确应用主题样式
   - 优化对话管理和模型信息框的样式设置
   - 修复主题切换时的样式不一致问题
+  - 优化Web后端API设计，支持配置管理和模型切换
+  - 实现Web版本与桌面版配置同步机制
 
 ### v2.2.0（2025-12-05）
 

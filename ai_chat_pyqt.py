@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QTextEdit, QPushButton, QMenuBar, QMenu, QStatusBar,
     QDialog, QLabel, QLineEdit, QGridLayout, QMessageBox, QProgressBar,
-    QInputDialog, QListWidget, QSplitter, QTabWidget
+    QInputDialog, QListWidget, QSplitter, QTabWidget, QFileDialog
 )
 import time
 
@@ -43,6 +43,11 @@ class ApiCallThread(QThread):
     def run(self):
         """执行API调用"""
         try:
+            # 设置重试次数和超时时间
+            max_retries = 3
+            retry_delay = 2  # 重试间隔（秒）
+            timeout = 60  # 超时时间（秒）
+            
             self.status_changed.emit("正在请求...")
             
             # 准备请求数据
@@ -66,12 +71,27 @@ class ApiCallThread(QThread):
             self.debug_info.emit(f"API请求头: {json.dumps(headers, indent=2, ensure_ascii=False)}")
             self.debug_info.emit(f"API请求数据: {json.dumps(data, indent=2, ensure_ascii=False)}")
             
-            response = requests.post(
-                self.config["api_url"],
-                headers=headers,
-                json=data,
-                timeout=30
-            )
+            # 重试机制
+            for attempt in range(max_retries):
+                try:
+                    self.status_changed.emit(f"正在请求... (第{attempt+1}/{max_retries}次)")
+                    response = requests.post(
+                        self.config["api_url"],
+                        headers=headers,
+                        json=data,
+                        timeout=timeout
+                    )
+                    # 如果成功，跳出循环
+                    break
+                except requests.exceptions.RequestException as e:
+                    if attempt < max_retries - 1:
+                        # 还有重试机会
+                        self.debug_info.emit(f"第{attempt+1}次请求失败，{retry_delay}秒后重试: {str(e)}")
+                        self.status_changed.emit(f"请求失败，{retry_delay}秒后重试...")
+                        time.sleep(retry_delay)
+                    else:
+                        # 最后一次尝试失败，抛出异常
+                        raise
             
             # 发送调试信息
             self.debug_info.emit(f"API响应状态码: {response.status_code}")
@@ -552,6 +572,12 @@ class AIChatPyQt(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
+        # 启用拖拽支持
+        central_widget.setAcceptDrops(True)
+        central_widget.dragEnterEvent = self.dragEnterEvent
+        central_widget.dragMoveEvent = self.dragMoveEvent
+        central_widget.dropEvent = self.dropEvent
+        
         # 创建主布局
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
@@ -757,169 +783,11 @@ class AIChatPyQt(QMainWindow):
     
     def create_chat_history(self, layout):
         """创建对话历史区域"""
-        # 创建主分割器，左侧显示对话管理，右侧显示对话内容
+        # 创建主分割器，左侧显示模型信息和调试，右侧显示对话内容
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         layout.addWidget(main_splitter, 1)
         
-        # 左侧对话管理区域
-        conversation_container = QWidget()
-        conversation_layout = QVBoxLayout(conversation_container)
-        conversation_layout.setContentsMargins(0, 0, 0, 0)
-        conversation_layout.setSpacing(5)
-        
-        # 对话管理标题
-        conv_title = QLabel("对话管理")
-        conv_title.setFont(QFont("Arial", 9, QFont.Weight.Bold))
-        conv_title.setStyleSheet("background-color: #0078d4; color: white; padding: 5px; border-radius: 3px;")
-        conversation_layout.addWidget(conv_title)
-        
-        # 文件夹管理区域
-        self.folder_section = QWidget()
-        self.folder_section.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
-        folder_layout = QVBoxLayout(self.folder_section)
-        folder_layout.setContentsMargins(5, 5, 5, 5)
-        folder_layout.setSpacing(3)
-        
-        folder_title = QLabel("文件夹")
-        folder_title.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        folder_title.setStyleSheet("color: #0078d4;")
-        folder_layout.addWidget(folder_title)
-        
-        # 文件夹列表
-        self.folder_list = QListWidget()
-        self.folder_list.setMaximumHeight(100)
-        self.folder_list.itemClicked.connect(self.on_folder_clicked)
-        folder_layout.addWidget(self.folder_list)
-        
-        # 文件夹操作按钮
-        folder_buttons = QHBoxLayout()
-        
-        # 新建文件夹按钮
-        self.new_folder_button = QPushButton("新建")
-        self.new_folder_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
-        self.new_folder_button.setFixedSize(65, 30)
-        self.new_folder_button.setStyleSheet(
-            "QPushButton { background-color: #0078d4; color: white; border: none; border-radius: 3px; }"
-            "QPushButton:hover { background-color: #106ebe; }"
-            "QPushButton:pressed { background-color: #005a9e; }"
-        )
-        self.new_folder_button.clicked.connect(self.create_new_folder)
-        
-        # 重命名文件夹按钮
-        self.rename_folder_button = QPushButton("重命名")
-        self.rename_folder_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
-        self.rename_folder_button.setFixedSize(65, 30)
-        self.rename_folder_button.setStyleSheet(
-            "QPushButton { background-color: #6c757d; color: white; border: none; border-radius: 3px; }"
-            "QPushButton:hover { background-color: #5a6268; }"
-            "QPushButton:pressed { background-color: #545b62; }"
-        )
-        self.rename_folder_button.clicked.connect(self.rename_folder)
-        
-        folder_buttons.addWidget(self.new_folder_button)
-        folder_buttons.addWidget(self.rename_folder_button)
-        folder_layout.addLayout(folder_buttons)
-        conversation_layout.addWidget(self.folder_section)
-        
-        # 标签管理区域
-        self.tag_section = QWidget()
-        self.tag_section.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 3px;")
-        tag_layout = QVBoxLayout(self.tag_section)
-        tag_layout.setContentsMargins(5, 5, 5, 5)
-        tag_layout.setSpacing(3)
-        
-        tag_title = QLabel("标签")
-        tag_title.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        tag_title.setStyleSheet("color: #0078d4;")
-        tag_layout.addWidget(tag_title)
-        
-        # 标签列表
-        self.tag_list = QListWidget()
-        self.tag_list.setMaximumHeight(100)
-        self.tag_list.itemClicked.connect(self.on_tag_clicked)
-        tag_layout.addWidget(self.tag_list)
-        
-        # 标签操作按钮
-        tag_buttons = QHBoxLayout()
-        
-        # 添加标签按钮
-        self.add_tag_button = QPushButton("添加")
-        self.add_tag_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
-        self.add_tag_button.setFixedSize(50, 30)
-        self.add_tag_button.setStyleSheet(
-            "QPushButton { background-color: #28a745; color: white; border: none; border-radius: 3px; }"
-            "QPushButton:hover { background-color: #218838; }"
-            "QPushButton:pressed { background-color: #1e7e34; }"
-        )
-        self.add_tag_button.clicked.connect(self.add_tag_to_conversation)
-        
-        # 移除标签按钮
-        self.remove_tag_button = QPushButton("移除")
-        self.remove_tag_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
-        self.remove_tag_button.setFixedSize(50, 30)
-        self.remove_tag_button.setStyleSheet(
-            "QPushButton { background-color: #dc3545; color: white; border: none; border-radius: 3px; }"
-            "QPushButton:hover { background-color: #c82333; }"
-            "QPushButton:pressed { background-color: #bd2130; }"
-        )
-        self.remove_tag_button.clicked.connect(self.remove_tag_from_conversation)
-        
-        tag_buttons.addWidget(self.add_tag_button)
-        tag_buttons.addWidget(self.remove_tag_button)
-        tag_layout.addLayout(tag_buttons)
-        conversation_layout.addWidget(self.tag_section)
-        
-        # 当前对话标签显示
-        current_tags_label = QLabel("当前对话标签:")
-        current_tags_label.setFont(QFont("Arial", 7, QFont.Weight.Bold))
-        conversation_layout.addWidget(current_tags_label)
-        
-        self.current_tags_list = QListWidget()
-        self.current_tags_list.setMaximumHeight(50)
-        conversation_layout.addWidget(self.current_tags_list)
-        
-        # 对话列表区域
-        conv_list_title = QLabel("对话列表")
-        conv_list_title.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        conv_list_title.setStyleSheet("color: #0078d4;")
-        conversation_layout.addWidget(conv_list_title)
-        
-        self.conversation_list = QListWidget()
-        self.conversation_list.itemClicked.connect(self.on_conversation_clicked)
-        self.conversation_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.conversation_list.customContextMenuRequested.connect(self.show_conversation_context_menu)
-        conversation_layout.addWidget(self.conversation_list, 1)
-        
-        # 批量操作按钮
-        batch_layout = QHBoxLayout()
-        
-        # 全选按钮
-        self.select_all_button = QPushButton("全选")
-        self.select_all_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
-        self.select_all_button.setFixedSize(50, 30)
-        self.select_all_button.setStyleSheet(
-            "QPushButton { background-color: #17a2b8; color: white; border: none; border-radius: 3px; }"
-            "QPushButton:hover { background-color: #138496; }"
-            "QPushButton:pressed { background-color: #117a8b; }"
-        )
-        self.select_all_button.clicked.connect(self.select_all_conversations)
-        
-        # 批量删除按钮
-        self.batch_delete_button = QPushButton("批量删除")
-        self.batch_delete_button.setFont(QFont("Arial", 7, QFont.Weight.Medium))
-        self.batch_delete_button.setFixedSize(65, 30)
-        self.batch_delete_button.setStyleSheet(
-            "QPushButton { background-color: #dc3545; color: white; border: none; border-radius: 3px; }"
-            "QPushButton:hover { background-color: #c82333; }"
-            "QPushButton:pressed { background-color: #bd2130; }"
-        )
-        self.batch_delete_button.clicked.connect(self.batch_delete_conversations)
-        
-        batch_layout.addWidget(self.select_all_button)
-        batch_layout.addWidget(self.batch_delete_button)
-        conversation_layout.addLayout(batch_layout)
-        
-        # 模型信息和调试区域
+        # 左侧模型信息和调试区域
         info_container = QWidget()
         info_layout = QVBoxLayout(info_container)
         info_layout.setContentsMargins(5, 5, 5, 5)
@@ -970,13 +838,7 @@ class AIChatPyQt(QMainWindow):
         self.debug_info.setPlaceholderText("调试信息将显示在这里...")
         info_layout.addWidget(self.debug_info, 1)
         
-        # 左侧分割器（对话管理 + 模型调试）
-        left_splitter = QSplitter(Qt.Orientation.Vertical)
-        left_splitter.addWidget(conversation_container)
-        left_splitter.addWidget(info_container)
-        left_splitter.setSizes([300, 200])
-        
-        main_splitter.addWidget(left_splitter)
+        main_splitter.addWidget(info_container)
         
         # 右侧容器，用于包含对话历史
         right_container = QWidget()
@@ -1025,18 +887,8 @@ class AIChatPyQt(QMainWindow):
         self.search_results = []
         self.current_search_index = -1
         
-        # 对话管理相关变量
-        self.current_folder = "default"
-        self.selected_tags = []
-        
-        # 加载对话列表和文件夹
-        self.load_folders()
-        self.load_tags()
-        self.load_conversations()
-        self.update_current_tags()
-        
-        # 设置分割器初始比例
-        main_splitter.setSizes([300, 900])
+        # 设置分割器初始比例，减少左侧区域宽度
+        main_splitter.setSizes([250, 950])
     
     def create_input_area(self, layout):
         """创建输入区域"""
@@ -1046,7 +898,7 @@ class AIChatPyQt(QMainWindow):
         
         # 输入框
         self.input_text = QTextEdit()
-        self.input_text.setMaximumHeight(100)
+        self.input_text.setMaximumHeight(150)
         self.input_text.setFont(QFont("Arial", 12))
         self.input_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.input_text.setPlaceholderText("请输入消息... (Enter发送, Shift+Enter换行)")
@@ -1096,6 +948,13 @@ class AIChatPyQt(QMainWindow):
         self.new_conv_button = QPushButton("新对话")
         self.new_conv_button.clicked.connect(self.new_conversation)
         button_layout.addWidget(self.new_conv_button)
+        
+        # 上传文件按钮
+        self.upload_button = QPushButton("上传文件")
+        self.upload_button.setFont(QFont("Arial", 8, QFont.Weight.Medium))
+        self.upload_button.setFixedHeight(30)
+        self.upload_button.clicked.connect(self.upload_file)
+        button_layout.addWidget(self.upload_button)
     
     def eventFilter(self, obj, event):
         """事件过滤器，处理输入框的按键事件"""
@@ -1109,6 +968,152 @@ class AIChatPyQt(QMainWindow):
                     self.send_message()
                     return True
         return super().eventFilter(obj, event)
+    
+    def dragEnterEvent(self, event):
+        """处理拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+    
+    def dragMoveEvent(self, event):
+        """处理拖拽移动事件"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+    
+    def dropEvent(self, event):
+        """处理拖拽释放事件"""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            files = [url.toLocalFile() for url in urls]
+            self.handle_dropped_files(files)
+            event.acceptProposedAction()
+    
+    def handle_dropped_files(self, files):
+        """处理拖拽的文件"""
+        for file_path in files:
+            if os.path.isfile(file_path):
+                self.process_file(file_path)
+    
+    def upload_file(self):
+        """上传文件按钮点击事件"""
+        # 支持的文件类型
+        file_filter = "所有支持的文件 (*.txt *.md *.py *.java *.c *.cpp *.h *.hpp *.js *.html *.css *.json *.xml *.jpg *.jpeg *.png *.gif *.bmp *.svg *.pdf);;"
+        file_filter += "文本文件 (*.txt *.md *.py *.java *.c *.cpp *.h *.hpp *.js *.html *.css *.json *.xml);;"
+        file_filter += "图片文件 (*.jpg *.jpeg *.png *.gif *.bmp *.svg);;"
+        file_filter += "PDF文件 (*.pdf);;"
+        file_filter += "所有文件 (*.*)"
+        
+        # 打开文件对话框
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择文件", "", file_filter
+        )
+        
+        if file_path:
+            self.process_file(file_path)
+    
+    def process_file(self, file_path):
+        """处理单个文件"""
+        # 获取文件扩展名
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        # 支持的文件类型
+        supported_file_types = {
+            'text': ['.txt', '.md', '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.js', '.html', '.css', '.json', '.xml'],
+            'image': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg'],
+            'pdf': ['.pdf']
+        }
+        
+        # 检查文件类型
+        file_type = None
+        for type_name, extensions in supported_file_types.items():
+            if file_ext in extensions:
+                file_type = type_name
+                break
+        
+        if file_type:
+            print(f"处理{file_type}文件: {file_path}")
+            self.extract_file_content(file_path, file_type)
+        else:
+            print(f"不支持的文件类型: {file_path}")
+    
+    def extract_file_content(self, file_path, file_type):
+        """提取文件内容"""
+        if file_type == 'text':
+            self.extract_text_content(file_path)
+        elif file_type == 'image':
+            self.extract_image_content(file_path)
+        elif file_type == 'pdf':
+            self.extract_pdf_content(file_path)
+    
+    def extract_text_content(self, file_path):
+        """提取文本文件内容"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            self.analyze_file_content(file_path, content)
+        except UnicodeDecodeError:
+            try:
+                with open(file_path, 'r', encoding='gbk') as f:
+                    content = f.read()
+                self.analyze_file_content(file_path, content)
+            except Exception as e:
+                print(f"读取文本文件失败: {e}")
+    
+    def extract_image_content(self, file_path):
+        """提取图片文件内容"""
+        # 图片内容提取将在后续实现，可能需要使用OCR库
+        print(f"图片文件: {file_path}")
+        # 目前仅显示图片路径，后续可以添加OCR功能
+        self.analyze_file_content(file_path, f"图片文件: {os.path.basename(file_path)}")
+    
+    def extract_pdf_content(self, file_path):
+        """提取PDF文件内容"""
+        # PDF内容提取将在后续实现，可能需要使用PyPDF2或pdfplumber库
+        print(f"PDF文件: {file_path}")
+        # 目前仅显示PDF路径，后续可以添加PDF内容提取功能
+        self.analyze_file_content(file_path, f"PDF文件: {os.path.basename(file_path)}")
+    
+    def analyze_file_content(self, file_path, content):
+        """使用AI分析文件内容"""
+        print(f"分析文件内容: {file_path}")
+        
+        # 准备分析提示
+        file_name = os.path.basename(file_path)
+        prompt = f"请分析以下文件内容，并提供总结和相关信息。\n\n文件名: {file_name}\n\n文件内容:\n{content[:2000]}..."  # 限制内容长度
+        
+        # 将分析请求添加到对话历史
+        message_id = f"msg_{self.message_counter}"
+        self.message_counter += 1
+        
+        self.conversation_history.append({
+            "id": message_id,
+            "role": "user", 
+            "content": prompt,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+        
+        # 显示用户请求
+        self.add_message_to_history("你", f"分析文件: {file_name}")
+        
+        # 清空输入框
+        self.input_text.clear()
+        
+        # 自动保存对话历史
+        self.save_history_auto()
+        
+        # 记录审计日志
+        self.write_audit_log("用户", "分析文件", f"文件路径: {file_path}")
+        
+        # 禁用发送按钮
+        self.send_button.setEnabled(False)
+        
+        # 启动API调用线程进行分析
+        self.api_thread = ApiCallThread(self.config, self.conversation_history, prompt)
+        self.api_thread.response_received.connect(self.on_response_received)
+        self.api_thread.error_occurred.connect(self.on_error_occurred)
+        self.api_thread.status_changed.connect(self.status_bar.showMessage)
+        self.api_thread.debug_info.connect(self.add_debug_info)
+        self.api_thread.finished.connect(self.on_api_thread_finished)
+        self.api_thread.start()
     
     def send_message(self):
         """发送消息"""
@@ -1131,7 +1136,7 @@ class AIChatPyQt(QMainWindow):
             "id": message_id,
             "role": "user", 
             "content": message,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.datetime.now().isoformat()
         })
         
         # 自动保存对话历史
@@ -1195,7 +1200,7 @@ class AIChatPyQt(QMainWindow):
             "id": message_id,
             "role": role,
             "content": message,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.datetime.now().isoformat()
         })
         
         # 打印对话历史用于调试
@@ -1712,7 +1717,7 @@ class AIChatPyQt(QMainWindow):
         
         # 打开文件保存对话框
         filename, _ = QFileDialog.getSaveFileName(
-            self, "导出统计数据", f"statistics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "JSON文件 (*.json)"
+            self, "导出统计数据", f"statistics_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "JSON文件 (*.json)"
         )
         
         if filename:
@@ -2817,7 +2822,7 @@ class AIChatPyQt(QMainWindow):
         # 打开文件保存对话框
         filename, _ = QFileDialog.getSaveFileName(
             self, f"导出对话为{format_type.upper()}", 
-            f"conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{default_ext}",
+            f"conversation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.{default_ext}",
             file_filter
         )
         
@@ -2843,7 +2848,7 @@ class AIChatPyQt(QMainWindow):
     def _generate_markdown_content(self):
         """生成Markdown格式的对话内容"""
         content = f"# AI对话历史\n\n"
-        content += f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        content += f"导出时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         
         for message in self.conversation_history:
             role = message["role"]
@@ -2863,7 +2868,7 @@ class AIChatPyQt(QMainWindow):
         """生成TXT格式的对话内容"""
         content = f"AI对话历史\n"
         content += f"=" * 50 + "\n"
-        content += f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        content += f"导出时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         content += f"=" * 50 + "\n\n"
         
         for message in self.conversation_history:

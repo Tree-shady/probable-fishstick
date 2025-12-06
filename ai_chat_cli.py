@@ -138,13 +138,33 @@ class AIChat:
         }
         
         try:
-            response = requests.post(
-                self.config["api_url"],
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            response.raise_for_status()  # 检查HTTP错误
+            # 设置重试次数和超时时间
+            max_retries = 3
+            retry_delay = 2  # 重试间隔（秒）
+            timeout = 60  # 超时时间（秒）
+            
+            # 重试机制
+            for attempt in range(max_retries):
+                try:
+                    print(f"正在请求... (第{attempt+1}/{max_retries}次)", end="\r", flush=True)
+                    response = requests.post(
+                        self.config["api_url"],
+                        headers=headers,
+                        json=data,
+                        timeout=timeout
+                    )
+                    response.raise_for_status()  # 检查HTTP错误
+                    # 如果成功，跳出循环
+                    break
+                except requests.exceptions.RequestException as e:
+                    if attempt < max_retries - 1:
+                        # 还有重试机会
+                        print(f"第{attempt+1}次请求失败，{retry_delay}秒后重试: {str(e)}")
+                        import time
+                        time.sleep(retry_delay)
+                    else:
+                        # 最后一次尝试失败，抛出异常
+                        raise
             
             # 打印原始响应内容用于调试
             raw_response = response.text

@@ -183,7 +183,7 @@ class StatisticsManager:
             "response_time_stats": self.get_response_time_statistics(),
             "conversation_duration_stats": self.get_conversation_duration_statistics(),
             "activity_stats": self.get_activity_statistics(),
-            "generated_at": datetime.now().isoformat()
+            "generated_at": datetime.datetime.now().isoformat()
         }
     
     def export_statistics(self, file_path):
