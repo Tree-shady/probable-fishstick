@@ -17,6 +17,18 @@ from PyQt6.QtWidgets import (
 )
 import time
 
+# 尝试导入文件处理相关库
+try:
+    from PIL import Image
+    import pytesseract
+except ImportError:
+    pass
+
+try:
+    import PyPDF2
+except ImportError:
+    pass
+
 # 导入对话管理模块
 from conversation_manager import ConversationManager
 # 导入预设管理模块
@@ -361,7 +373,11 @@ class AIChatPyQt(QMainWindow):
             "curious": "表达好奇心，使用探索性的语气，鼓励进一步讨论。",
             "humorous": "使用风趣幽默的语气，保持轻松愉快的氛围。"
         }
-        
+
+        # 初始化对话分支管理
+        self.conversation_branches = {}
+        self.current_branch = "main"
+        self.conversation_branches[self.current_branch] = []
 
         
         # 创建或加载当前对话
@@ -410,13 +426,7 @@ class AIChatPyQt(QMainWindow):
         # 记录启动日志
         self.write_audit_log("系统", "启动", "AI对话软件启动成功")
     
-    def save_history_auto(self):
-        """自动保存对话历史"""
-        if self.current_conversation_id:
-            self.conversation_manager.update_conversation(
-                self.current_conversation_id, 
-                self.conversation_history
-            )
+
     
     def load_config(self):
         """加载配置文件"""
@@ -629,10 +639,11 @@ class AIChatPyQt(QMainWindow):
         regenerate_action.triggered.connect(self.regenerate_response)
         chat_menu.addAction(regenerate_action)
         
-        # 编辑消息功能将在后续实现，需要选择要编辑的消息
-        # edit_action = QAction("编辑消息", self)
-        # edit_action.triggered.connect(self.edit_selected_message)
-        # chat_menu.addAction(edit_action)
+        # 编辑消息功能
+        edit_action = QAction("编辑消息", self)
+        edit_action.setShortcut("Ctrl+E")
+        edit_action.triggered.connect(self.edit_selected_message)
+        chat_menu.addAction(edit_action)
         
         chat_menu.addSeparator()
         
@@ -644,10 +655,10 @@ class AIChatPyQt(QMainWindow):
         new_branch_action.triggered.connect(self.create_new_branch)
         branch_menu.addAction(new_branch_action)
         
-        # 切换分支功能将在后续实现，需要选择分支
-        # switch_branch_action = QAction("切换分支", self)
-        # switch_branch_action.triggered.connect(self.switch_branch_dialog)
-        # branch_menu.addAction(switch_branch_action)
+        # 切换分支功能
+        switch_branch_action = QAction("切换分支", self)
+        switch_branch_action.triggered.connect(self.switch_branch_dialog)
+        branch_menu.addAction(switch_branch_action)
         
         # 添加新功能菜单
         file_menu.addSeparator()
@@ -746,6 +757,11 @@ class AIChatPyQt(QMainWindow):
             action.setToolTip(theme_info["description"])
             action.triggered.connect(lambda checked=False, tn=theme_name: self.apply_theme(tn))
             theme_menu.addAction(action)
+        
+        # 添加自定义主题选项
+        custom_theme_action = QAction("自定义主题", self)
+        custom_theme_action.triggered.connect(self.custom_theme_dialog)
+        theme_menu.addAction(custom_theme_action)
         
         # 添加分隔线
         view_menu.addSeparator()
@@ -1059,18 +1075,61 @@ class AIChatPyQt(QMainWindow):
                 print(f"读取文本文件失败: {e}")
     
     def extract_image_content(self, file_path):
-        """提取图片文件内容"""
-        # 图片内容提取将在后续实现，可能需要使用OCR库
-        print(f"图片文件: {file_path}")
-        # 目前仅显示图片路径，后续可以添加OCR功能
-        self.analyze_file_content(file_path, f"图片文件: {os.path.basename(file_path)}")
+        """提取图片文件内容，使用OCR技术"""
+        print(f"处理图片文件: {file_path}")
+        try:
+            # 检查是否安装了PIL和pytesseract
+            if 'Image' not in globals() or 'pytesseract' not in globals():
+                raise ImportError("未安装OCR依赖库，请先安装: pip install pillow pytesseract")
+            
+            # 打开图片并进行OCR识别
+            image = Image.open(file_path)
+            text = pytesseract.image_to_string(image, lang='chi_sim+eng')  # 支持中英文
+            
+            # 构建内容描述
+            file_name = os.path.basename(file_path)
+            content = f"图片文件: {file_name}\n\nOCR识别内容:\n{text}"
+            
+            self.analyze_file_content(file_path, content)
+        except ImportError as e:
+            print(f"OCR功能未启用: {e}")
+            file_name = os.path.basename(file_path)
+            self.analyze_file_content(file_path, f"图片文件: {file_name}\n\n(提示: 安装OCR依赖库可启用图片内容识别)")
+        except Exception as e:
+            print(f"图片OCR处理失败: {e}")
+            file_name = os.path.basename(file_path)
+            self.analyze_file_content(file_path, f"图片文件: {file_name}\n\n(提示: 图片处理失败: {str(e)})")
     
     def extract_pdf_content(self, file_path):
         """提取PDF文件内容"""
-        # PDF内容提取将在后续实现，可能需要使用PyPDF2或pdfplumber库
-        print(f"PDF文件: {file_path}")
-        # 目前仅显示PDF路径，后续可以添加PDF内容提取功能
-        self.analyze_file_content(file_path, f"PDF文件: {os.path.basename(file_path)}")
+        print(f"处理PDF文件: {file_path}")
+        try:
+            # 检查是否安装了PyPDF2
+            if 'PyPDF2' not in globals():
+                raise ImportError("未安装PDF处理库，请先安装: pip install PyPDF2")
+            
+            # 打开PDF文件并提取内容
+            with open(file_path, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                text = ""
+                for page_num in range(len(reader.pages)):
+                    page = reader.pages[page_num]
+                    text += f"--- 第 {page_num+1} 页 ---\n"
+                    text += page.extract_text() + "\n"
+            
+            # 构建内容描述
+            file_name = os.path.basename(file_path)
+            content = f"PDF文件: {file_name}\n\n总页数: {len(reader.pages)}\n\n内容提取:\n{text[:2000]}..."  # 限制内容长度
+            
+            self.analyze_file_content(file_path, content)
+        except ImportError as e:
+            print(f"PDF功能未启用: {e}")
+            file_name = os.path.basename(file_path)
+            self.analyze_file_content(file_path, f"PDF文件: {file_name}\n\n(提示: 安装PyPDF2库可启用PDF内容提取)")
+        except Exception as e:
+            print(f"PDF处理失败: {e}")
+            file_name = os.path.basename(file_path)
+            self.analyze_file_content(file_path, f"PDF文件: {file_name}\n\n(提示: PDF处理失败: {str(e)})")
     
     def analyze_file_content(self, file_path, content):
         """使用AI分析文件内容"""
@@ -1314,6 +1373,262 @@ class AIChatPyQt(QMainWindow):
         self.load_history_to_chat()
         
         return True
+    
+    def switch_branch_dialog(self):
+        """切换分支的对话框"""
+        from PyQt6.QtWidgets import QListWidget, QDialog, QVBoxLayout, QPushButton, QHBoxLayout
+        
+        if not self.conversation_branches:
+            QMessageBox.information(self, "提示", "没有可用的分支。")
+            return
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("切换分支")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 分支列表
+        branch_list = QListWidget()
+        layout.addWidget(branch_list)
+        
+        # 填充分支列表
+        for branch_name in self.conversation_branches:
+            branch_list.addItem(branch_name)
+        
+        # 设置当前分支为选中状态
+        current_index = branch_list.findItems(self.current_branch, Qt.MatchFlag.MatchExactly)
+        if current_index:
+            branch_list.setCurrentItem(current_index[0])
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        layout.addLayout(button_layout)
+        
+        # 确定按钮
+        ok_button = QPushButton("确定")
+        ok_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_button)
+        
+        # 取消按钮
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_button)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_item = branch_list.currentItem()
+            if selected_item:
+                branch_name = selected_item.text()
+                if self.switch_branch(branch_name):
+                    QMessageBox.information(self, "成功", f"已切换到分支 '{branch_name}'")
+                    # 记录审计日志
+                    self.write_audit_log("用户", "切换分支", f"从 {self.current_branch} 切换到 {branch_name}")
+                    
+    def quote_message(self):
+        """引用选中的消息"""
+        # 获取选中的文本
+        selected_text = self.chat_history.textCursor().selectedText()
+        if selected_text:
+            # 格式化引用内容
+            quoted_text = f"> {selected_text.replace(chr(10), chr(10) + '> ')}"
+            # 获取当前输入框内容
+            current_text = self.input_text.toPlainText()
+            # 插入引用内容
+            if current_text:
+                new_text = f"{quoted_text}\n\n{current_text}"
+            else:
+                new_text = f"{quoted_text}\n\n"
+            self.input_text.setPlainText(new_text)
+            # 将光标移动到输入框末尾
+            self.input_text.moveCursor(QTextCursor.MoveOperation.End)
+            
+    def custom_theme_dialog(self):
+        """自定义主题对话框"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QColorDialog
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("自定义主题")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 主题名称输入
+        name_layout = QHBoxLayout()
+        name_label = QLabel("主题名称:")
+        self.custom_theme_name = QLineEdit()
+        self.custom_theme_name.setPlaceholderText("请输入主题名称")
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(self.custom_theme_name)
+        layout.addLayout(name_layout)
+        
+        # 主题描述输入
+        desc_layout = QHBoxLayout()
+        desc_label = QLabel("主题描述:")
+        self.custom_theme_desc = QLineEdit()
+        self.custom_theme_desc.setPlaceholderText("请输入主题描述")
+        desc_layout.addWidget(desc_label)
+        desc_layout.addWidget(self.custom_theme_desc)
+        layout.addLayout(desc_layout)
+        
+        # 颜色选择器
+        self.theme_colors = {
+            "background": "#ffffff",
+            "text": "#000000",
+            "header": "#f0f0f0",
+            "primary": "#0078d4",
+            "secondary": "#f5f5f5",
+            "border": "#e0e0e0",
+            "button_bg": "#0078d4",
+            "button_text": "#ffffff",
+            "button_hover": "#005a9e"
+        }
+        
+        # 当前主题颜色作为默认值
+        if self.current_theme in self.themes:
+            current_theme = self.themes[self.current_theme]
+            for color_name in self.theme_colors:
+                if color_name in current_theme:
+                    self.theme_colors[color_name] = current_theme[color_name]
+        
+        self.color_buttons = {}
+        
+        for color_name, default_color in self.theme_colors.items():
+            color_layout = QHBoxLayout()
+            color_label = QLabel(f"{color_name.replace('_', ' ').title()}:")
+            color_button = QPushButton()
+            color_button.setStyleSheet(f"background-color: {default_color}; border: 1px solid #e0e0e0; border-radius: 2px; width: 50px; height: 25px;")
+            color_button.clicked.connect(lambda checked=False, cn=color_name: self.choose_color(cn))
+            self.color_buttons[color_name] = color_button
+            color_layout.addWidget(color_label)
+            color_layout.addWidget(color_button)
+            layout.addLayout(color_layout)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 保存按钮
+        save_button = QPushButton("保存")
+        save_button.clicked.connect(self.save_custom_theme)
+        button_layout.addWidget(save_button)
+        
+        # 取消按钮
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addLayout(button_layout)
+        
+        dialog.exec()
+        
+    def choose_color(self, color_name):
+        """选择颜色"""
+        from PyQt6.QtWidgets import QColorDialog
+        
+        # 获取当前颜色
+        current_color = self.theme_colors[color_name]
+        
+        # 打开颜色选择器
+        color = QColorDialog.getColor(current_color, self, f"选择 {color_name} 颜色")
+        
+        if color.isValid():
+            # 更新颜色值
+            self.theme_colors[color_name] = color.name()
+            # 更新按钮样式
+            self.color_buttons[color_name].setStyleSheet(f"background-color: {color.name()}; border: 1px solid #e0e0e0; border-radius: 2px; width: 50px; height: 25px;")
+            
+    def save_custom_theme(self):
+        """保存自定义主题"""
+        theme_name = self.custom_theme_name.text().strip()
+        if not theme_name:
+            QMessageBox.warning(self, "错误", "主题名称不能为空")
+            return
+        
+        # 检查主题名称是否已存在
+        if theme_name in self.themes:
+            QMessageBox.warning(self, "错误", "主题名称已存在")
+            return
+        
+        # 创建主题配置
+        theme = {
+            "name": theme_name,
+            "description": self.custom_theme_desc.text().strip() or "自定义主题",
+            **self.theme_colors
+        }
+        
+        # 添加到主题列表
+        self.themes[theme_name] = theme
+        
+        # 保存主题配置
+        try:
+            with open(self.themes_file, 'w', encoding='utf-8') as f:
+                json.dump(self.themes, f, indent=2, ensure_ascii=False)
+            
+            QMessageBox.information(self, "成功", f"主题 '{theme_name}' 已保存")
+            
+            # 记录审计日志
+            self.write_audit_log("用户", "自定义主题", f"创建了新主题: {theme_name}")
+            
+            # 应用新主题
+            self.apply_theme(theme_name)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存主题失败: {str(e)}")
+    
+    def edit_selected_message(self):
+        """编辑选中的消息"""
+        if not self.conversation_history:
+            QMessageBox.information(self, "提示", "没有可编辑的消息。")
+            return
+        
+        # 创建一个对话框让用户选择要编辑的消息
+        from PyQt6.QtWidgets import QListWidget, QDialog, QVBoxLayout, QPushButton, QHBoxLayout
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("选择要编辑的消息")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 消息列表
+        message_list = QListWidget()
+        layout.addWidget(message_list)
+        
+        # 填充消息列表
+        for i, message in enumerate(self.conversation_history):
+            sender = "你" if message["role"] == "user" else "AI"
+            preview = message["content"][:50] + "..." if len(message["content"]) > 50 else message["content"]
+            message_list.addItem(f"{i+1}. [{sender}] {preview}")
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        layout.addLayout(button_layout)
+        
+        # 确定按钮
+        ok_button = QPushButton("确定")
+        ok_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_button)
+        
+        # 取消按钮
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_button)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_index = message_list.currentRow()
+            if selected_index >= 0:
+                selected_message = self.conversation_history[selected_index]
+                
+                # 获取新内容
+                new_content, ok = QInputDialog.getMultiLineText(
+                    self, "编辑消息", f"编辑[{selected_message['role']}]的消息:",
+                    selected_message["content"]
+                )
+                
+                if ok and new_content.strip():
+                    # 更新消息内容
+                    self.edit_message(selected_message["id"], new_content.strip())
+                    
+                    # 记录审计日志
+                    self.write_audit_log("用户", "编辑消息", f"消息ID: {selected_message['id']}")
     
     def on_error_occurred(self, error_message):
         """处理API错误"""
@@ -2304,6 +2619,9 @@ class AIChatPyQt(QMainWindow):
         # 获取主题配置
         theme = self.themes[theme_name]
         
+        # 记录审计日志
+        self.write_audit_log("用户", "切换主题", f"切换到主题: {theme_name}")
+        
         # 应用全局样式
         app = QApplication.instance()
         app.setStyleSheet(
@@ -2668,9 +2986,12 @@ class AIChatPyQt(QMainWindow):
             copy_action = menu.addAction("复制")
             copy_action.triggered.connect(self.copy_selected_text)
         
+        # 添加引用消息选项
+        quote_action = menu.addAction("引用消息")
+        quote_action.triggered.connect(self.quote_message)
+        
         # 显示菜单
-        if menu.actions():
-            menu.exec(self.chat_history.mapToGlobal(position))
+        menu.exec(self.chat_history.mapToGlobal(position))
     
     def copy_selected_text(self):
         """复制选中的文本到剪贴板"""
