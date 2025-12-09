@@ -1,0 +1,22 @@
+{
+  "IFLOW(OpenAi格式)": {
+    "name": "IFLOW(OpenAI兼容API)",
+    "api_key_hint": "sk-399273a84a274c7b0db1007d0c4fe1e6",
+    "base_url": "https://apis.iflow.cn/v1/chat/completions",
+    "models": [
+      "deepseek-v3.1"
+    ],
+    "enabled": true,
+    "api_type": "iflow"
+  },
+  "硅基流动": {
+    "name": "硅基流动",
+    "api_key_hint": "https://api.siliconflow.cn",
+    "base_url": "https://api.siliconflow.cn/v1/chat/completions",
+    "models": [
+      "Qwen/Qwen3-8B"
+    ],
+    "enabled": true,
+    "api_type": "openai"
+  }
+}
