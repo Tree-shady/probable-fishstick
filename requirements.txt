@@ -1,7 +1,12 @@
-crequests
+PyQt6
+pyqtgraph
+watchdog
+requests
 psutil
 cryptography
 urllib3
 Pillow
 beautifulsoup4
 pystray
+mysql-connector-python
+psycopg2-binary

@@ -1,22 +1,89 @@
 {
-  "IFLOW(OpenAi格式)": {
-    "name": "IFLOW(OpenAI兼容API)",
-    "api_key_hint": "sk-399273a84a274c7b0db1007d0c4fe1e6",
-    "base_url": "https://apis.iflow.cn/v1/chat/completions",
-    "models": [
-      "deepseek-v3.1"
-    ],
-    "enabled": true,
-    "api_type": "iflow"
+  "platforms": {
+    "IFLOW(OpenAi格式)": {
+      "name": "IFLOW(OpenAI兼容API)",
+      "models": [
+        "deepseek-v3.1"
+      ],
+      "api_key": "sk-8fcdc3114c68ee16960ccb4e2e2b638f",
+      "enabled": true,
+      "api_type": "iflow",
+      "base_url": "https://apis.iflow.cn/v1/chat/completions",
+      "api_key_hint": "sk-8fcdc3114c68ee16960ccb4e2e2b638f",
+      "selected_model": "deepseek-v3.1"
+    },
+    "硅基流动": {
+      "name": "硅基流动",
+      "models": [
+        "Qwen/Qwen3-8B"
+      ],
+      "enabled": true,
+      "api_type": "openai",
+      "base_url": "https://api.siliconflow.cn/v1/chat/completions",
+      "api_key_hint": "sk-ygadudgctikzgsmswsyrfpltkqyerrajjujqvszfvjwtuaml"
+    }
   },
-  "硅基流动": {
-    "name": "硅基流动",
-    "api_key_hint": "https://api.siliconflow.cn",
-    "base_url": "https://api.siliconflow.cn/v1/chat/completions",
-    "models": [
-      "Qwen/Qwen3-8B"
-    ],
-    "enabled": true,
-    "api_type": "openai"
+  "settings": {
+    "window": {
+      "width": 1200,
+      "height": 800,
+      "auto_save": true
+    },
+    "appearance": {
+      "theme": "深色主题",
+      "font": null,
+      "font_size": 12
+    },
+    "network": {
+      "timeout": 30,
+      "retry_count": 1,
+      "use_proxy": false,
+      "proxy_type": "HTTP",
+      "proxy_host": "",
+      "proxy_port": 8080,
+      "verify_ssl": false
+    },
+    "chat": {
+      "auto_scroll": true,
+      "auto_save": true,
+      "show_timestamp": true,
+      "streaming": true,
+      "response_speed": 5,
+      "max_history": 100
+    },
+    "memory": {
+      "enabled": true,
+      "memory_type": "short_term",
+      "max_memory_length": 10,
+      "max_tokens": 8192,
+      "memory_persistence": true,
+      "memory_retention_days": 7
+    },
+    "database": {
+      "enabled": true,
+      "type": "mysql",
+      "host": "156.238.234.55",
+      "port": 3306,
+      "database": "shuyinQIn_AIchat_pyqt6",
+      "username": "shuyinQIn_AIchat",
+      "password": "QQxESPQDBHtzkNWm",
+      "sync_interval": 120,
+      "sync_on_startup": true,
+      "sync_config": true,
+      "sync_conversations": true,
+      "sync_memories": true
+    },
+    "debug": {
+      "enabled": true,
+      "verbose": false,
+      "log_level": "INFO"
+    },
+    "shortcuts": {
+      "send_message": "Enter",
+      "clear_chat": "Ctrl+L",
+      "copy_selected": "Ctrl+C",
+      "paste_text": "Ctrl+V",
+      "show_settings": "Ctrl+S"
+    }
   }
 }
