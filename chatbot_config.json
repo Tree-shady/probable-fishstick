@@ -5,11 +5,11 @@
       "models": [
         "deepseek-v3.1"
       ],
-      "api_key": "sk-8fcdc3114c68ee16960ccb4e2e2b638f",
+      "api_key": "Z0FBQUFBQnBQWjBNUUd0SDF5cmtVeUtiMVhWWDhGSkIwNlRzeWgyNVdBeTVTMFdPc05MMHlWeDhVU1BETGFVM0l4Q2ZHNmFhLXFEZjlWb0xTbG04TjJJUkktNHN2Q2Q1ajJybkF4b3UtMWFSSzJXX3JMZGI2M3dEUW5iQXJ0UUdNRTgxRi1COWZJcjU=",
       "enabled": true,
       "api_type": "iflow",
       "base_url": "https://apis.iflow.cn/v1/chat/completions",
-      "api_key_hint": "sk-8fcdc3114c68ee16960ccb4e2e2b638f",
+      "api_key_hint": "none",
       "selected_model": "deepseek-v3.1"
     },
     "硅基流动": {
@@ -20,7 +20,8 @@
       "enabled": true,
       "api_type": "openai",
       "base_url": "https://api.siliconflow.cn/v1/chat/completions",
-      "api_key_hint": "sk-ygadudgctikzgsmswsyrfpltkqyerrajjujqvszfvjwtuaml"
+      "api_key_hint": "none",
+      "api_key": "Z0FBQUFBQnBQWjBNd0x1R1NIcEpxdWdJdnd6QjFjYjExOG9DYlFpZ2YyT2VFR2ptUXBLM2h4c2gybVNaenpzOVJtS250THBoeUlMYXhrNGlRNUxnVFBfRFVnakIyZG9rM25qUGhweDU4c3Vnc2RVdF8zYnhCd3JCbmRHVzd5dlBwZ21CaklEeHNBaUl5bDRWRl9XUWlYX0R3bm0zelB6OVZnPT0="
     }
   },
   "settings": {
@@ -49,7 +50,7 @@
       "show_timestamp": true,
       "streaming": true,
       "response_speed": 5,
-      "max_history": 100
+      "max_history": 300
     },
     "memory": {
       "enabled": true,
@@ -65,13 +66,14 @@
       "host": "156.238.234.55",
       "port": 3306,
       "database": "shuyinQIn_AIchat_pyqt6",
-      "username": "shuyinQIn_AIchat",
-      "password": "QQxESPQDBHtzkNWm",
-      "sync_interval": 120,
+      "username": "Z0FBQUFBQnBQWjBNZzU4X1oyWE5ITkdkVmJqTkhHcEVfbDliQ1NjRE1DNXItVjctT05MbmR6MjV0V3R4ZThtVU9FcE5MS21IWHd5TE9ZODRhcUoyTWlndHk2UGhSd01SYnc0eFRwdVhDLThWYjdRcnRiMFV4N3c9",
+      "password": "Z0FBQUFBQnBQWjBNUDFpR3g0UjYzanhQTWNYVzN6bmVxcVlUMHpvZEp4ZURyTnNiUWwzallJeXZoZXRoVnQtaW42RUZ5emoyZFRjV3QtYnhYQ2tFdGtZNy1uemI0aGU5NlNHbDlTRm9YSWpXbVVTV2JldEhvRXc9",
+      "sync_interval": 60,
       "sync_on_startup": true,
       "sync_config": true,
       "sync_conversations": true,
-      "sync_memories": true
+      "sync_memories": true,
+      "sync_after_ai_response": false
     },
     "debug": {
       "enabled": true,

@@ -10,3 +10,5 @@ beautifulsoup4
 pystray
 mysql-connector-python
 psycopg2-binary
+asyncio
+aiofiles
