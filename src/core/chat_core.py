@@ -171,6 +171,8 @@ class ChatCore:
     def refresh_chat_display(self) -> None:
         """刷新聊天显示，使用优化的消息样式"""
         self.parent.chat_display.clear()
+        
+        # 显示所有对话历史
         for entry in self.parent.conversation_history:
             sender = entry['sender']
             content = entry['content']
@@ -179,10 +181,10 @@ class ChatCore:
             # 用户和AI消息有不同的样式区分
             if sender == "用户":
                 sender_name = "你"
-                message_style = """style='margin: 10px 0; padding: 10px; background-color: #e3f2fd; border-radius: 10px; max-width: 70%; align-self: flex-end; text-align: right; float: right;'"""
+                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-end; text-align: right; float: right;'"""
             else:
                 sender_name = "AI"
-                message_style = """style='margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 10px; max-width: 70%; align-self: flex-start; text-align: left;'"""
+                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-start; text-align: left;'"""
             
             # 根据设置决定是否显示时间戳
             show_timestamp = self.parent.settings.get('chat', {}).get('show_timestamp', True)
@@ -211,6 +213,26 @@ class ChatCore:
             self.parent.conversation_history = []
             self.parent.chat_display.clear()
             self.save_conversation()
+    
+    def search_conversation(self, search_text: str) -> list:
+        """搜索对话历史
+        
+        Args:
+            search_text: 搜索关键词
+            
+        Returns:
+            list: 包含搜索结果的对话历史列表
+        """
+        if not search_text:
+            return []
+        
+        search_results = []
+        for message in self.parent.conversation_history:
+            content = message.get('content', '')
+            if search_text.lower() in content.lower():
+                search_results.append(message)
+        
+        return search_results
     
     def export_conversation_history(self) -> None:
         """导出对话历史"""

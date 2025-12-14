@@ -107,6 +107,27 @@ class UIManager:
         chat_tab = QWidget()
         chat_layout = QVBoxLayout(chat_tab)
         
+        # 搜索区域
+        search_layout = QHBoxLayout()
+        search_layout.setContentsMargins(0, 0, 0, 10)
+        
+        search_label = QLabel("搜索:")
+        search_layout.addWidget(search_label)
+        
+        self.parent.search_input = QLineEdit()
+        self.parent.search_input.setPlaceholderText("输入关键词搜索对话历史...")
+        search_layout.addWidget(self.parent.search_input)
+        
+        self.parent.search_button = QPushButton("搜索")
+        self.parent.search_button.clicked.connect(self.parent.search_conversation)
+        search_layout.addWidget(self.parent.search_button)
+        
+        self.parent.clear_search_button = QPushButton("清除搜索")
+        self.parent.clear_search_button.clicked.connect(self.parent.clear_search)
+        search_layout.addWidget(self.parent.clear_search_button)
+        
+        chat_layout.addLayout(search_layout)
+        
         # 聊天显示区域
         self.parent.chat_display = QTextEdit()
         self.parent.chat_display.setReadOnly(True)
@@ -160,6 +181,16 @@ class UIManager:
         self.parent.insert_image_btn = QPushButton("图片")
         self.parent.insert_image_btn.clicked.connect(self.parent.insert_image)
         input_buttons.addWidget(self.parent.insert_image_btn)
+        
+        # 截图按钮
+        self.parent.screenshot_btn = QPushButton("截图")
+        self.parent.screenshot_btn.clicked.connect(self.parent.take_screenshot)
+        input_buttons.addWidget(self.parent.screenshot_btn)
+        
+        # 快捷回复按钮
+        self.parent.quick_reply_btn = QPushButton("快捷回复")
+        self.parent.quick_reply_btn.clicked.connect(self.parent.show_quick_replies)
+        input_buttons.addWidget(self.parent.quick_reply_btn)
         
         input_buttons.addStretch()
         
@@ -346,13 +377,26 @@ class UIManager:
         show_timestamp = self.parent.settings.get('chat', {}).get('show_timestamp', True)
         timestamp_text = f" ({timestamp})" if show_timestamp else ""
         
+        # 生成唯一ID
+        message_id = f"{time.time()}-{id(content)}"
+        
         # 构建消息HTML
-        message_html = "<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;'>"
+        message_html = f"<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;' id='message_{message_id}'>"
+        
+        # 消息内容
         if sender == "用户":
-            message_html += f"<div class='user-message' {message_style}><strong style='color: #1976d2;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{content}</div></div>"
+            message_html += f"<div class='user-message' {message_style}><strong style='color: #1976d2;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{content}</div>"
         else:
-            message_html += f"<div class='ai-message' {message_style}><strong style='color: #4caf50;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{content}</div></div>"
-        message_html += "</div><div style='clear: both;'></div>"
+            message_html += f"<div class='ai-message' {message_style}><strong style='color: #4caf50;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{content}</div>"
+        
+        # 只有用户自己发送的消息才显示编辑和删除按钮
+        if sender == "用户":
+            message_html += f"<div style='margin-top: 5px; text-align: right;'>"
+            message_html += f"<button onclick='parent.edit_message(\"{id}\")' style='margin: 0 2px; padding: 2px 5px; font-size: 10px;'>编辑</button>"
+            message_html += f"<button onclick='parent.delete_message(\"{id}\")' style='margin: 0 2px; padding: 2px 5px; font-size: 10px;'>删除</button>"
+            message_html += "</div>"
+        
+        message_html += "</div></div><div style='clear: both;'></div>"
         
         # 显示消息
         self.parent.chat_display.append(message_html)
@@ -361,9 +405,12 @@ class UIManager:
         if self.parent.settings['chat']['auto_scroll']:
             self.parent.chat_display.verticalScrollBar().setValue(self.parent.chat_display.verticalScrollBar().maximum())
         
+        # 生成唯一ID
+        message_id = f"{time.time()}-{id(content)}"
+        
         # 更新对话历史
         self.parent.conversation_history.append({
-            'id': f"{time.time()}-{id(content)}",  # 添加唯一ID
+            'id': message_id,  # 添加唯一ID
             'sender': sender,
             'content': content,
             'timestamp': timestamp,  # 添加timestamp字段

@@ -213,6 +213,68 @@ class UniversalChatBotPyQt6(QMainWindow):
         """清空输入框"""
         self.message_input.clear()
     
+    def search_conversation(self):
+        """搜索对话历史"""
+        search_text = self.search_input.text().strip()
+        if not search_text:
+            QMessageBox.information(self, "提示", "请输入搜索关键词")
+            return
+        
+        # 执行搜索
+        search_results = self.chat_core.search_conversation(search_text)
+        
+        # 显示搜索结果
+        if search_results:
+            self.display_search_results(search_results, search_text)
+        else:
+            QMessageBox.information(self, "搜索结果", f"未找到包含 '{search_text}' 的消息")
+    
+    def clear_search(self):
+        """清除搜索结果，恢复显示全部对话"""
+        self.search_input.clear()
+        self.chat_core.refresh_chat_display()
+    
+    def display_search_results(self, results, search_text):
+        """显示搜索结果"""
+        self.chat_display.clear()
+        
+        # 显示搜索提示
+        search_info = f"<div style='text-align: center; margin: 10px 0; font-style: italic; color: #666;'>"
+        search_info += f"搜索结果: 找到 {len(results)} 条包含 '{search_text}' 的消息</div><br>"
+        self.chat_display.append(search_info)
+        
+        # 显示搜索结果
+        for entry in results:
+            sender = entry['sender']
+            content = entry['content']
+            created_at = entry['created_at']
+            
+            # 高亮搜索关键词
+            highlighted_content = content.replace(search_text, f"<span style='background-color: #ffff00; color: #000;'>{search_text}</span>")
+            
+            # 用户和AI消息有不同的样式区分
+            if sender == "用户":
+                sender_name = "你"
+                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-end; text-align: right; float: right;'"""
+            else:
+                sender_name = "AI"
+                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-start; text-align: left;'"""
+            
+            # 根据设置决定是否显示时间戳
+            show_timestamp = self.settings.get('chat', {}).get('show_timestamp', True)
+            timestamp_text = f" ({created_at})" if show_timestamp else ""
+            
+            # 构建消息HTML
+            message_html = f"<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;'>"
+            if sender == "用户":
+                message_html += f"<div class='user-message' {message_style}><strong style='color: #1976d2;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{highlighted_content}</div></div>"
+            else:
+                message_html += f"<div class='ai-message' {message_style}><strong style='color: #4caf50;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{highlighted_content}</div></div>"
+            message_html += "</div><div style='clear: both;'></div>"
+            
+            # 显示消息
+            self.chat_display.append(message_html)
+    
     def copy_selected_text(self):
         """复制选中的文本"""
         self.chat_display.copy()
@@ -220,6 +282,100 @@ class UniversalChatBotPyQt6(QMainWindow):
     def paste_text(self):
         """粘贴文本到输入框"""
         self.message_input.paste()
+    
+    def edit_message(self, message_id):
+        """编辑消息"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox
+        
+        # 查找要编辑的消息
+        message_index = -1
+        for i, message in enumerate(self.conversation_history):
+            if message['id'] == message_id:
+                message_index = i
+                break
+        
+        if message_index == -1:
+            QMessageBox.warning(self, "错误", "未找到要编辑的消息")
+            return
+        
+        message = self.conversation_history[message_index]
+        
+        # 创建编辑对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("编辑消息")
+        dialog.resize(500, 200)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 消息编辑框
+        edit_text = QTextEdit()
+        edit_text.setPlainText(message['content'])
+        layout.addWidget(edit_text)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        save_btn = QPushButton("保存")
+        save_btn.clicked.connect(lambda: self._save_edited_message(dialog, message_index, edit_text.toPlainText()))
+        button_layout.addWidget(save_btn)
+        
+        cancel_btn = QPushButton("取消")
+        cancel_btn.clicked.connect(dialog.close)
+        button_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(button_layout)
+        
+        dialog.exec()
+    
+    def _save_edited_message(self, dialog, message_index, new_content):
+        """保存编辑后的消息"""
+        if not new_content.strip():
+            QMessageBox.warning(self, "提示", "消息内容不能为空")
+            return
+        
+        # 更新消息内容
+        self.conversation_history[message_index]['content'] = new_content.strip()
+        
+        # 保存到文件
+        self.save_conversation()
+        
+        # 刷新聊天显示
+        self.chat_core.refresh_chat_display()
+        
+        QMessageBox.information(self, "成功", "消息已成功编辑")
+        dialog.close()
+    
+    def delete_message(self, message_id):
+        """删除消息"""
+        from PyQt6.QtWidgets import QMessageBox
+        
+        # 查找要删除的消息
+        message_index = -1
+        for i, message in enumerate(self.conversation_history):
+            if message['id'] == message_id:
+                message_index = i
+                break
+        
+        if message_index == -1:
+            QMessageBox.warning(self, "错误", "未找到要删除的消息")
+            return
+        
+        # 确认删除
+        reply = QMessageBox.question(self, "确认删除", "确定要删除这条消息吗？",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # 删除消息
+        del self.conversation_history[message_index]
+        
+        # 保存到文件
+        self.save_conversation()
+        
+        # 刷新聊天显示
+        self.chat_core.refresh_chat_display()
+        
+        QMessageBox.information(self, "成功", "消息已成功删除")
     
     def attach_file(self):
         """附加文件"""
@@ -238,6 +394,158 @@ class UniversalChatBotPyQt6(QMainWindow):
         self.settings['database']['enabled'] = not self.settings['database']['enabled']
         self.settings_manager.update_settings(self.settings)
         self.enable_db_btn.setText("禁用数据库" if self.settings['database']['enabled'] else "启用数据库")
+    
+    def load_quick_replies(self):
+        """加载快捷回复列表"""
+        # 默认快捷回复
+        default_replies = [
+            "你好，能帮我解答一个问题吗？",
+            "请详细解释一下这个概念。",
+            "可以提供更多相关信息吗？",
+            "这个问题的解决方案是什么？",
+            "感谢你的帮助！",
+            "请举个例子说明。",
+            "我不太明白，能再解释一遍吗？",
+            "这个功能是如何工作的？"
+        ]
+        
+        # 从设置中加载快捷回复，如果没有则使用默认值
+        if 'quick_replies' not in self.settings:
+            self.settings['quick_replies'] = default_replies
+            self.settings_manager.update_settings(self.settings)
+        
+        return self.settings['quick_replies']
+    
+    def show_quick_replies(self):
+        """显示快捷回复菜单"""
+        from PyQt6.QtWidgets import QMenu, QAction
+        
+        quick_replies = self.load_quick_replies()
+        
+        # 创建快捷回复菜单
+        menu = QMenu("快捷回复", self)
+        
+        # 添加快捷回复选项
+        for reply in quick_replies:
+            action = QAction(reply, self)
+            action.triggered.connect(lambda checked, r=reply: self.use_quick_reply(r))
+            menu.addAction(action)
+        
+        # 添加编辑快捷回复选项
+        menu.addSeparator()
+        edit_action = QAction("编辑快捷回复", self)
+        edit_action.triggered.connect(self.edit_quick_replies)
+        menu.addAction(edit_action)
+        
+        # 显示菜单
+        menu.exec(self.quick_reply_btn.mapToGlobal(self.quick_reply_btn.rect().bottomLeft()))
+    
+    def use_quick_reply(self, reply_text):
+        """使用快捷回复"""
+        self.message_input.setPlainText(reply_text)
+        self.message_input.setFocus()
+    
+    def take_screenshot(self):
+        """截图功能"""
+        from PyQt6.QtWidgets import QApplication, QMessageBox
+        from PyQt6.QtGui import QScreen, QPixmap
+        import os
+        import time
+        
+        try:
+            # 获取屏幕截图
+            screen = QApplication.primaryScreen()
+            pixmap = screen.grabWindow(0)  # 0表示整个屏幕
+            
+            # 生成截图文件名
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            screenshot_dir = os.path.join(os.getcwd(), "screenshots")
+            
+            # 创建截图目录
+            if not os.path.exists(screenshot_dir):
+                os.makedirs(screenshot_dir)
+            
+            # 保存截图
+            screenshot_path = os.path.join(screenshot_dir, f"screenshot_{timestamp}.png")
+            pixmap.save(screenshot_path)
+            
+            # 将截图路径添加到输入框
+            self.message_input.append(f"[截图: {os.path.basename(screenshot_path)}]\n{screenshot_path}")
+            
+            self.add_debug_info(f"截图已保存: {screenshot_path}", "INFO")
+        except Exception as e:
+            self.add_debug_info(f"截图失败: {str(e)}", "ERROR")
+            QMessageBox.critical(self, "错误", f"截图失败: {str(e)}")
+    
+    def edit_quick_replies(self):
+        """编辑快捷回复列表"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QLineEdit, QMessageBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("编辑快捷回复")
+        dialog.resize(400, 300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 快捷回复列表
+        reply_list = QListWidget()
+        reply_list.addItems(self.load_quick_replies())
+        layout.addWidget(reply_list)
+        
+        # 输入框
+        input_layout = QHBoxLayout()
+        new_reply_input = QLineEdit()
+        new_reply_input.setPlaceholderText("输入新的快捷回复...")
+        input_layout.addWidget(new_reply_input)
+        
+        # 按钮组
+        button_layout = QHBoxLayout()
+        
+        add_btn = QPushButton("添加")
+        add_btn.clicked.connect(lambda: self._add_quick_reply(new_reply_input, reply_list))
+        button_layout.addWidget(add_btn)
+        
+        remove_btn = QPushButton("删除")
+        remove_btn.clicked.connect(lambda: self._remove_quick_reply(reply_list))
+        button_layout.addWidget(remove_btn)
+        
+        save_btn = QPushButton("保存")
+        save_btn.clicked.connect(lambda: self._save_quick_replies(dialog, reply_list))
+        button_layout.addWidget(save_btn)
+        
+        cancel_btn = QPushButton("取消")
+        cancel_btn.clicked.connect(dialog.close)
+        button_layout.addWidget(cancel_btn)
+        
+        input_layout.addLayout(button_layout)
+        layout.addLayout(input_layout)
+        
+        dialog.exec()
+    
+    def _add_quick_reply(self, input_field, reply_list):
+        """添加快捷回复"""
+        new_reply = input_field.text().strip()
+        if new_reply:
+            reply_list.addItem(new_reply)
+            input_field.clear()
+    
+    def _remove_quick_reply(self, reply_list):
+        """删除选中的快捷回复"""
+        selected_items = reply_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "提示", "请选择要删除的快捷回复")
+            return
+        
+        for item in selected_items:
+            reply_list.takeItem(reply_list.row(item))
+    
+    def _save_quick_replies(self, dialog, reply_list):
+        """保存快捷回复列表"""
+        quick_replies = [reply_list.item(i).text() for i in range(reply_list.count())]
+        self.settings['quick_replies'] = quick_replies
+        self.settings_manager.update_settings(self.settings)
+        QMessageBox.information(self, "成功", "快捷回复已保存")
+        dialog.close()
     
     def connect_database(self):
         """连接数据库"""
