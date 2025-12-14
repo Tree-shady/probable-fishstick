@@ -14,6 +14,8 @@ from .data.statistics import StatisticsManager
 from .data.memory import MemoryManager
 from .utils.network import NetworkMonitor
 from .utils.helpers import load_json_file, save_json_file, get_current_timestamp
+from .utils.encryption import EncryptionManager
+from .utils.logging_manager import LoggingManager
 
 class UniversalChatBotPyQt6(QMainWindow):
     """PyQt6版本的多功能AI聊天助手"""
@@ -57,11 +59,11 @@ class UniversalChatBotPyQt6(QMainWindow):
         self.memories_dir = os.path.join(os.getcwd(), "memories")
         self.memory_manager = MemoryManager(self, self.memories_dir)
         
-        # 初始化UI
-        self.ui_manager = UIManager(self)
-        
         # 初始化聊天核心
         self.chat_core = ChatCore(self)
+        
+        # 初始化UI
+        self.ui_manager = UIManager(self)
         
         # 连接信号槽
         self.update_streaming_response.connect(self.append_streaming_response)
@@ -72,6 +74,22 @@ class UniversalChatBotPyQt6(QMainWindow):
         
         # 初始化定期同步定时器
         self.setup_sync_timer()
+        
+        # 初始化缓存管理器
+        from .utils.cache_manager import CacheManager
+        self.cache_manager = CacheManager()
+        
+        # 初始化加密管理器
+        self.encryption_manager = EncryptionManager()
+        
+        # 初始化日志管理器
+        self.logging_manager = LoggingManager()
+        
+        # 记录应用启动
+        self.logging_manager.log_activity("聊天助手启动", "INFO", component="app", action="startup")
+        
+        # 初始化主题
+        self._init_theme()
         
         # 初始化平台下拉框
         available_platforms = [p for p, config in self.platforms.items() if config['enabled']]
@@ -90,22 +108,200 @@ class UniversalChatBotPyQt6(QMainWindow):
         
         # 延迟初始化数据库，在主窗口显示后再尝试
         QTimer.singleShot(2000, self.delayed_init_db)
+        
+        # 初始化监控数据更新定时器
+        self._init_monitor_timer()
+    
+    def _init_theme(self):
+        """初始化主题设置"""
+        # 检测系统主题
+        is_dark = self.theme_manager.is_system_dark_theme()
+        
+        # 如果没有设置主题，根据系统主题自动选择
+        if 'appearance' not in self.settings or 'theme' not in self.settings['appearance']:
+            self.settings.setdefault('appearance', {})
+            self.settings['appearance']['theme'] = '深色主题' if is_dark else '浅色主题'
+            self.settings_manager.update_settings(self.settings)
+        
+        # 应用当前主题
+        current_theme = self.settings['appearance']['theme']
+        self.ui_manager.apply_theme(current_theme)
     
     def _init_theme_manager(self):
         """初始化主题管理器"""
-        # 简单的主题管理器实现
-        class SimpleThemeManager:
-            def get_available_themes(self):
-                return ["默认主题", "深色主题", "浅色主题"]
+        from PyQt6.QtCore import QSettings
+        
+        class EnhancedThemeManager:
+            def __init__(self, parent):
+                self.parent = parent
+                self.themes = {
+                    "默认主题": {
+                        "name": "默认主题",
+                        "background": "#f0f0f0",
+                        "text": "#000000",
+                        "user_bubble": "#e3f2fd",
+                        "ai_bubble": "#f5f5f5",
+                        "user_name": "#1976d2",
+                        "ai_name": "#4caf50",
+                        "border_radius": "10px"
+                    },
+                    "深色主题": {
+                        "name": "深色主题",
+                        "background": "#2b2b2b",
+                        "text": "#ffffff",
+                        "user_bubble": "#3c5a76",
+                        "ai_bubble": "#424242",
+                        "user_name": "#64b5f6",
+                        "ai_name": "#81c784",
+                        "border_radius": "10px"
+                    },
+                    "浅色主题": {
+                        "name": "浅色主题",
+                        "background": "#ffffff",
+                        "text": "#000000",
+                        "user_bubble": "#e8f5e8",
+                        "ai_bubble": "#f5f5f5",
+                        "user_name": "#388e3c",
+                        "ai_name": "#6d4c41",
+                        "border_radius": "10px"
+                    },
+                    "蓝色主题": {
+                        "name": "蓝色主题",
+                        "background": "#e3f2fd",
+                        "text": "#0d47a1",
+                        "user_bubble": "#bbdefb",
+                        "ai_bubble": "#e1f5fe",
+                        "user_name": "#1976d2",
+                        "ai_name": "#0288d1",
+                        "border_radius": "12px"
+                    },
+                    "绿色主题": {
+                        "name": "绿色主题",
+                        "background": "#e8f5e8",
+                        "text": "#1b5e20",
+                        "user_bubble": "#c8e6c9",
+                        "ai_bubble": "#e0f2f1",
+                        "user_name": "#388e3c",
+                        "ai_name": "#00695c",
+                        "border_radius": "15px"
+                    }
+                }
+                
+                # 用户自定义主题
+                self.custom_theme = {
+                    "name": "自定义主题",
+                    "background": "#f0f0f0",
+                    "text": "#000000",
+                    "user_bubble": "#e3f2fd",
+                    "ai_bubble": "#f5f5f5",
+                    "user_name": "#1976d2",
+                    "ai_name": "#4caf50",
+                    "border_radius": "10px",
+                    "font_size": 12
+                }
             
-            def get_theme_stylesheet(self, theme_name):
-                if theme_name == "深色主题":
-                    return """QMainWindow { background-color: #2b2b2b; color: #ffffff; }"""
-                elif theme_name == "浅色主题":
-                    return """QMainWindow { background-color: #ffffff; color: #000000; }"""
+            def get_available_themes(self):
+                """获取可用主题列表"""
+                return list(self.themes.keys()) + ["自定义主题"]
+            
+            def get_theme_stylesheet(self, theme_name, custom_theme=None):
+                """获取主题样式表"""
+                if theme_name == "自定义主题" and custom_theme:
+                    theme = custom_theme
                 else:
-                    return ""
-        return SimpleThemeManager()
+                    theme = self.themes.get(theme_name, self.themes["默认主题"])
+                
+                # 构建完整的样式表
+                stylesheet = """
+                QMainWindow { 
+                    background-color: %s; 
+                    color: %s; 
+                    font-size: %spx;
+                }
+                QTextEdit {
+                    background-color: %s; 
+                    color: %s; 
+                    font-size: %spx;
+                }
+                QLineEdit {
+                    background-color: %s; 
+                    color: %s; 
+                    font-size: %spx;
+                }
+                QPushButton {
+                    background-color: %s; 
+                    color: %s; 
+                    font-size: %spx;
+                    border-radius: 5px;
+                    padding: 5px 10px;
+                }
+                QPushButton:hover {
+                    opacity: 0.8;
+                }
+                QComboBox {
+                    background-color: %s; 
+                    color: %s; 
+                    font-size: %spx;
+                }
+                QLabel {
+                    color: %s; 
+                    font-size: %spx;
+                }
+                """ % (theme['background'], theme['text'], theme.get('font_size', 12),
+                       theme['background'], theme['text'], theme.get('font_size', 12),
+                       theme['background'], theme['text'], theme.get('font_size', 12),
+                       theme['user_bubble'], theme['user_name'], theme.get('font_size', 12),
+                       theme['background'], theme['text'], theme.get('font_size', 12),
+                       theme['text'], theme.get('font_size', 12))
+                
+                return stylesheet
+            
+            def get_message_style(self, sender, theme_name, custom_theme=None):
+                """获取消息样式"""
+                # 尝试从缓存获取主题样式
+                if hasattr(self.parent, 'cache_manager'):
+                    cached_style = self.parent.cache_manager.get_theme_style(theme_name, custom_theme or {})
+                    if cached_style:
+                        return cached_style
+                
+                if theme_name == "自定义主题" and custom_theme:
+                    theme = custom_theme
+                else:
+                    theme = self.themes.get(theme_name, self.themes["默认主题"])
+                
+                if sender == "用户":
+                    style = {
+                        "sender_name": "你",
+                        "message_style": f"""style='margin: 10px 0; padding: 10px; border-radius: {theme['border_radius']}; max-width: 70%; align-self: flex-start; text-align: left;'""",
+                        "name_color": theme['user_name'],
+                        "content_color": theme['user_name']
+                    }
+                else:
+                    style = {
+                        "sender_name": "AI",
+                        "message_style": f"""style='margin: 10px 0; padding: 10px; border-radius: {theme['border_radius']}; max-width: 70%; align-self: flex-start; text-align: left;'""",
+                        "name_color": theme['ai_name'],
+                        "content_color": theme['text']
+                    }
+                
+                # 缓存主题样式
+                if hasattr(self.parent, 'cache_manager'):
+                    self.parent.cache_manager.update_theme_style(theme_name, custom_theme or {}, style)
+                
+                return style
+            
+            def is_system_dark_theme(self):
+                """检测系统主题是否为深色"""
+                try:
+                    # Windows系统
+                    settings = QSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", QSettings.Format.NativeFormat)
+                    if settings.contains("AppsUseLightTheme"):
+                        return not settings.value("AppsUseLightTheme", type=bool)
+                except:
+                    pass
+                return False
+        
+        return EnhancedThemeManager(self)
     
     def delayed_init_db(self):
         """延迟初始化数据库"""
@@ -127,6 +323,43 @@ class UniversalChatBotPyQt6(QMainWindow):
         """设置定期同步定时器"""
         # 同步定时器功能已集成到database.py模块中
         pass
+    
+    def _init_monitor_timer(self):
+        """初始化监控数据更新定时器"""
+        self.monitor_timer = QTimer(self)
+        self.monitor_timer.timeout.connect(self._update_monitor_data)
+        self.monitor_timer.start(1000)  # 每秒更新一次监控数据
+    
+    def _update_monitor_data(self):
+        """更新监控数据到UI组件"""
+        try:
+            # 更新网络状态
+            if hasattr(self, 'network_monitor'):
+                self.network_status_label.setText(f"网络状态: {self.network_monitor.network_status}")
+                self.ip_address_label.setText(f"IP地址: {self.network_monitor.ip_address}")
+                self.network_latency_label.setText(f"延迟: {self.network_monitor.ping_latency}")
+            
+            # 更新系统资源
+            import psutil
+            memory = psutil.virtual_memory()
+            memory_usage = f"内存使用: {memory.percent}%"
+            if hasattr(self, 'memory_usage_label'):
+                self.memory_usage_label.setText(memory_usage)
+            
+            # 更新数据库状态
+            if hasattr(self, 'db_manager') and self.db_manager:
+                db_status = "已连接" if self.db_manager.is_connected else "未连接"
+                db_type = self.settings.get('database', {}).get('type', 'unknown')
+                sync_status = "同步中" if hasattr(self.db_manager, 'is_syncing') and self.db_manager.is_syncing else "已同步"
+                
+                if hasattr(self, 'db_status_label'):
+                    self.db_status_label.setText(f"数据库状态: {db_status}")
+                if hasattr(self, 'db_type_label'):
+                    self.db_type_label.setText(f"数据库类型: {db_type}")
+                if hasattr(self, 'sync_status_label'):
+                    self.sync_status_label.setText(f"同步状态: {sync_status}")
+        except Exception as e:
+            self.add_debug_info(f"更新监控数据失败: {str(e)}", "ERROR")
     
     def display_message(self, sender: str, content: str) -> None:
         """在聊天窗口中显示消息"""
@@ -252,13 +485,15 @@ class UniversalChatBotPyQt6(QMainWindow):
             # 高亮搜索关键词
             highlighted_content = content.replace(search_text, f"<span style='background-color: #ffff00; color: #000;'>{search_text}</span>")
             
-            # 用户和AI消息有不同的样式区分
-            if sender == "用户":
-                sender_name = "你"
-                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-end; text-align: right; float: right;'"""
-            else:
-                sender_name = "AI"
-                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-start; text-align: left;'"""
+            # 获取当前主题
+            current_theme = self.settings.get('appearance', {}).get('theme', '默认主题')
+            custom_theme = self.settings.get('appearance', {}).get('custom_theme', {})
+            
+            # 获取消息样式
+            message_style_data = self.theme_manager.get_message_style(sender, current_theme, custom_theme)
+            sender_name = message_style_data['sender_name']
+            message_style = message_style_data['message_style']
+            name_color = message_style_data['name_color']
             
             # 根据设置决定是否显示时间戳
             show_timestamp = self.settings.get('chat', {}).get('show_timestamp', True)
@@ -267,9 +502,9 @@ class UniversalChatBotPyQt6(QMainWindow):
             # 构建消息HTML
             message_html = f"<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;'>"
             if sender == "用户":
-                message_html += f"<div class='user-message' {message_style}><strong style='color: #1976d2;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{highlighted_content}</div></div>"
+                message_html += f"<div class='user-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {message_style_data['content_color']};'>{highlighted_content}</div></div>"
             else:
-                message_html += f"<div class='ai-message' {message_style}><strong style='color: #4caf50;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{highlighted_content}</div></div>"
+                message_html += f"<div class='ai-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {message_style_data['content_color']};'>{highlighted_content}</div></div>"
             message_html += "</div><div style='clear: both;'></div>"
             
             # 显示消息
@@ -395,6 +630,10 @@ class UniversalChatBotPyQt6(QMainWindow):
         self.settings_manager.update_settings(self.settings)
         self.enable_db_btn.setText("禁用数据库" if self.settings['database']['enabled'] else "启用数据库")
     
+    def change_theme(self, theme_name):
+        """切换主题"""
+        self.ui_manager.apply_theme(theme_name)
+    
     def load_quick_replies(self):
         """加载快捷回复列表"""
         # 默认快捷回复
@@ -418,7 +657,8 @@ class UniversalChatBotPyQt6(QMainWindow):
     
     def show_quick_replies(self):
         """显示快捷回复菜单"""
-        from PyQt6.QtWidgets import QMenu, QAction
+        from PyQt6.QtWidgets import QMenu
+        from PyQt6.QtGui import QAction
         
         quick_replies = self.load_quick_replies()
         
@@ -576,11 +816,181 @@ class UniversalChatBotPyQt6(QMainWindow):
     
     def show_about_dialog(self):
         """显示关于对话框"""
-        QMessageBox.information(self, "关于", "多功能AI聊天助手\n版本: 1.0.0\n基于PyQt6开发")
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextBrowser, QPushButton, QLabel
+        from PyQt6.QtCore import Qt
+        
+        # 创建对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("关于多功能AI聊天助手")
+        dialog.resize(600, 500)
+        dialog.setMinimumSize(500, 400)
+        
+        # 创建布局
+        layout = QVBoxLayout(dialog)
+        
+        # 创建标题
+        title_label = QLabel("多功能AI聊天助手")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        layout.addWidget(title_label)
+        
+        # 创建文本浏览器，支持滚动条
+        text_browser = QTextBrowser()
+        about_text = """
+        <h2>多功能AI聊天助手</h2>
+        <p>版本: 1.0.0</p>
+        <p>基于PyQt6开发的多功能AI聊天助手，支持多种AI平台集成。</p>
+        <br>
+        <h3>主要特点</h3>
+        <ul>
+            <li>多平台AI集成</li>
+            <li>现代化的用户界面</li>
+            <li>主题切换支持</li>
+            <li>对话历史管理</li>
+            <li>网络安全功能</li>
+            <li>记忆模块</li>
+            <li>任务管理</li>
+            <li>数据库同步</li>
+        </ul>
+        <br>
+        <h3>技术栈</h3>
+        <ul>
+            <li>Python 3.8+</li>
+            <li>PyQt6 - GUI框架</li>
+            <li>异步编程 - 提高响应速度</li>
+            <li>模块化设计 - 便于扩展</li>
+        </ul>
+        <br>
+        <h3>开发者</h3>
+        <p>Tree-shady</p>
+        <p>© 2025 AI聊天助手</p>
+        <p>许可证: MIT License</p>
+        """
+        text_browser.setHtml(about_text)
+        layout.addWidget(text_browser)
+        
+        # 创建按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 关闭按钮
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(dialog.close)
+        button_layout.addWidget(close_btn)
+        button_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addLayout(button_layout)
+        
+        # 显示对话框
+        dialog.exec()
     
     def open_help_dialog(self):
         """打开帮助文档"""
-        QMessageBox.information(self, "帮助", "这是一个多功能AI聊天助手，支持多种AI平台和功能。\n\n主要功能:\n- 支持多种AI平台\n- 流式响应\n- 对话历史保存\n- 统计报告\n- 个人信息管理\n- 任务管理\n- 数据库同步")
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextBrowser, QPushButton, QLabel
+        from PyQt6.QtCore import Qt
+        
+        # 创建对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("帮助文档 - 多功能AI聊天助手")
+        dialog.resize(700, 600)
+        dialog.setMinimumSize(600, 500)
+        
+        # 创建布局
+        layout = QVBoxLayout(dialog)
+        
+        # 创建标题
+        title_label = QLabel("多功能AI聊天助手 - 使用指南")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        layout.addWidget(title_label)
+        
+        # 创建文本浏览器，支持滚动条
+        text_browser = QTextBrowser()
+        help_text = """
+        <h2>多功能AI聊天助手 - 使用指南</h2>
+        <br>
+        <h3>📱 界面说明</h3>
+        <h4>左侧面板</h4>
+        <p>显示程序运行日志和调试信息，包含以下功能：</p>
+        <ul>
+            <li>调试信息显示</li>
+            <li>数据库操作按钮</li>
+        </ul>
+        
+        <h4>右侧面板</h4>
+        <p>主要聊天区域，包含以下功能：</p>
+        <ul>
+            <li>聊天消息显示</li>
+            <li>消息输入框</li>
+            <li>AI平台选择</li>
+            <li>主题切换</li>
+            <li>对话搜索</li>
+        </ul>
+        <br>
+        <h3>⚙️ 核心功能</h3>
+        <h4>1. 多平台支持</h4>
+        <p>支持多种AI平台API，可在设置中管理平台配置。</p>
+        
+        <h4>2. 对话管理</h4>
+        <p>支持对话历史的保存、导入和导出功能。</p>
+        
+        <h4>3. 主题切换</h4>
+        <p>支持多种主题选择，可根据系统主题自动适配。</p>
+        
+        <h4>4. 流式输出</h4>
+        <p>支持AI响应的流式显示，提升交互体验。</p>
+        
+        <h4>5. 数据库同步</h4>
+        <p>支持将对话历史和配置同步到远程数据库。</p>
+        
+        <h4>6. 搜索功能</h4>
+        <p>支持关键词搜索对话历史。</p>
+        
+        <h4>7. 快捷回复</h4>
+        <p>支持自定义快捷回复，提高聊天效率。</p>
+        
+        <h4>8. 截图功能</h4>
+        <p>支持快速截图并发送到聊天窗口。</p>
+        <br>
+        <h3>💡 使用技巧</h3>
+        <ul>
+            <li>使用 <strong>Enter</strong> 键发送消息</li>
+            <li>使用 <strong>Shift+Enter</strong> 换行</li>
+            <li>可通过主题切换调整界面风格</li>
+            <li>定期导出对话历史备份</li>
+            <li>使用搜索功能快速查找历史消息</li>
+        </ul>
+        <br>
+        <h3>❓ 常见问题</h3>
+        <h4>Q: 如何添加新的AI平台？</h4>
+        <p>A: 在设置菜单中选择平台配置，添加新平台的API信息。</p>
+        
+        <h4>Q: 对话历史保存在哪里？</h4>
+        <p>A: 对话历史默认保存在程序目录下的 conversation_history.json 文件中。</p>
+        
+        <h4>Q: 如何切换主题？</h4>
+        <p>A: 在聊天界面顶部的主题下拉框中选择喜欢的主题。</p>
+        
+        <h4>Q: 如何备份数据？</h4>
+        <p>A: 可通过文件菜单中的导出功能备份对话历史和设置。</p>
+        <br>
+        
+        """
+        text_browser.setHtml(help_text)
+        layout.addWidget(text_browser)
+        
+        # 创建按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 关闭按钮
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(dialog.close)
+        button_layout.addWidget(close_btn)
+        button_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addLayout(button_layout)
+        
+        # 显示对话框
+        dialog.exec()
     
     def add_debug_info(self, info: str, level: str = "INFO"):
         """添加调试信息"""

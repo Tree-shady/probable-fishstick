@@ -169,37 +169,42 @@ class ChatCore:
         asyncio.run_coroutine_threadsafe(async_load(), asyncio.get_event_loop())
     
     def refresh_chat_display(self) -> None:
-        """刷新聊天显示，使用优化的消息样式"""
+        """刷新聊天显示，使用优化的消息样式和批量加载"""
         self.parent.chat_display.clear()
         
-        # 显示所有对话历史
+        # 获取当前主题和自定义主题设置
+        current_theme = self.parent.settings.get('appearance', {}).get('theme', '默认主题')
+        custom_theme = self.parent.settings.get('appearance', {}).get('custom_theme', {})
+        show_timestamp = self.parent.settings.get('chat', {}).get('show_timestamp', True)
+        
+        # 批量构建HTML内容，减少UI更新次数
+        html_content = []
         for entry in self.parent.conversation_history:
             sender = entry['sender']
             content = entry['content']
             created_at = entry['created_at']
             
-            # 用户和AI消息有不同的样式区分
-            if sender == "用户":
-                sender_name = "你"
-                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-end; text-align: right; float: right;'"""
-            else:
-                sender_name = "AI"
-                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-start; text-align: left;'"""
+            # 获取消息样式
+            message_style_data = self.parent.theme_manager.get_message_style(sender, current_theme, custom_theme)
+            sender_name = message_style_data['sender_name']
+            message_style = message_style_data['message_style']
+            name_color = message_style_data['name_color']
+            content_color = message_style_data['content_color']
             
-            # 根据设置决定是否显示时间戳
-            show_timestamp = self.parent.settings.get('chat', {}).get('show_timestamp', True)
             timestamp_text = f" ({created_at})" if show_timestamp else ""
             
             # 构建消息HTML
             message_html = f"<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;'>"
             if sender == "用户":
-                message_html += f"<div class='user-message' {message_style}><strong style='color: #1976d2;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{content}</div></div>"
+                message_html += f"<div class='user-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{content}</div></div>"
             else:
-                message_html += f"<div class='ai-message' {message_style}><strong style='color: #4caf50;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{content}</div></div>"
+                message_html += f"<div class='ai-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{content}</div></div>"
             message_html += "</div><div style='clear: both;'></div>"
             
-            # 显示消息
-            self.parent.chat_display.append(message_html)
+            html_content.append(message_html)
+        
+        # 一次性设置HTML内容，减少UI更新次数
+        self.parent.chat_display.setHtml(''.join(html_content))
         
         # 自动滚动到底部
         if self.parent.settings['chat']['auto_scroll']:
@@ -283,14 +288,22 @@ class ChatCore:
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
                 self.current_ai_message_timestamp = timestamp
                 
-                # 使用统一的消息样式，取消白底
-                sender_name = "AI"
+                # 获取当前主题
+                current_theme = self.parent.settings.get('appearance', {}).get('theme', '默认主题')
+                custom_theme = self.parent.settings.get('appearance', {}).get('custom_theme', {})
+                
+                # 获取消息样式
+                message_style_data = self.parent.theme_manager.get_message_style('AI', current_theme, custom_theme)
+                sender_name = message_style_data['sender_name']
+                message_style = message_style_data['message_style']
+                name_color = message_style_data['name_color']
+                
+                # 显示时间戳设置
                 show_timestamp = self.parent.settings.get('chat', {}).get('show_timestamp', True)
                 timestamp_text = f" ({timestamp})" if show_timestamp else ""
-                message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-start; text-align: left;'"""
                 
                 # 显示AI消息前缀
-                message_prefix = f"<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;'><div class='ai-message' {message_style}><strong style='color: #4caf50;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>"
+                message_prefix = f"<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;'><div class='ai-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {message_style_data['content_color']};'>"
                 self.parent.chat_display.append(message_prefix)
             
             # 实时显示响应内容

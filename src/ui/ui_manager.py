@@ -43,21 +43,29 @@ class UIManager:
         splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter)
         
-        # 左侧面板：调试信息框
+        # 左侧面板：包含调试信息和监控面板
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_panel.setMinimumWidth(300)
+        
+        # 创建左侧面板的标签页
+        left_tab_widget = QTabWidget()
+        left_layout.addWidget(left_tab_widget)
+        
+        # 调试信息标签页
+        debug_tab = QWidget()
+        debug_layout = QVBoxLayout(debug_tab)
         
         # 调试信息标题
         debug_title = QLabel("调试信息")
         debug_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         debug_title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        left_layout.addWidget(debug_title)
+        debug_layout.addWidget(debug_title)
         
         # 调试信息文本框
         self.parent.debug_display = QTextEdit()
         self.parent.debug_display.setReadOnly(True)
-        left_layout.addWidget(self.parent.debug_display)
+        debug_layout.addWidget(self.parent.debug_display)
         
         # 调试操作按钮
         debug_buttons = QHBoxLayout()
@@ -70,7 +78,7 @@ class UIManager:
         export_debug_btn.clicked.connect(self.parent.export_debug_info)
         debug_buttons.addWidget(export_debug_btn)
         
-        left_layout.addLayout(debug_buttons)
+        debug_layout.addLayout(debug_buttons)
         
         # 数据库操作按钮
         db_buttons = QHBoxLayout()
@@ -90,7 +98,68 @@ class UIManager:
         connect_db_btn.clicked.connect(self.parent.connect_database)
         db_buttons.addWidget(connect_db_btn)
         
-        left_layout.addLayout(db_buttons)
+        debug_layout.addLayout(db_buttons)
+        
+        left_tab_widget.addTab(debug_tab, "调试")
+        
+        # 监控面板标签页
+        monitor_tab = QWidget()
+        monitor_layout = QVBoxLayout(monitor_tab)
+        
+        # 监控面板标题
+        monitor_title = QLabel("系统监控")
+        monitor_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        monitor_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        monitor_layout.addWidget(monitor_title)
+        
+        # 网络状态监控
+        network_group = QGroupBox("网络状态")
+        network_layout = QVBoxLayout(network_group)
+        
+        # 网络连接状态
+        self.parent.network_status_label = QLabel("网络状态: 未连接")
+        network_layout.addWidget(self.parent.network_status_label)
+        
+        # IP地址
+        self.parent.ip_address_label = QLabel("IP地址: - - - - - - - - - - ")
+        network_layout.addWidget(self.parent.ip_address_label)
+        
+        # 网络延迟
+        self.parent.network_latency_label = QLabel("延迟: - - ms")
+        network_layout.addWidget(self.parent.network_latency_label)
+        
+        monitor_layout.addWidget(network_group)
+        
+        # 数据库状态监控
+        db_group = QGroupBox("数据库状态")
+        db_layout = QVBoxLayout(db_group)
+        
+        # 数据库连接状态
+        self.parent.db_status_label = QLabel("数据库状态: 未连接")
+        db_layout.addWidget(self.parent.db_status_label)
+        
+        # 数据库类型
+        db_type = self.parent.settings.get('database', {}).get('type', 'unknown')
+        self.parent.db_type_label = QLabel(f"数据库类型: {db_type}")
+        db_layout.addWidget(self.parent.db_type_label)
+        
+        # 同步状态
+        self.parent.sync_status_label = QLabel("同步状态: 未同步")
+        db_layout.addWidget(self.parent.sync_status_label)
+        
+        monitor_layout.addWidget(db_group)
+        
+        # 系统资源监控
+        system_group = QGroupBox("系统资源")
+        system_layout = QVBoxLayout(system_group)
+        
+        # 内存使用情况
+        self.parent.memory_usage_label = QLabel("内存使用: - -%")
+        system_layout.addWidget(self.parent.memory_usage_label)
+        
+        monitor_layout.addWidget(system_group)
+        
+        left_tab_widget.addTab(monitor_tab, "监控")
         
         # 添加左侧面板到分割器
         splitter.addWidget(left_panel)
@@ -137,12 +206,29 @@ class UIManager:
         # 平台选择和状态区域
         platform_layout = QHBoxLayout()
         
+        # AI平台选择
         platform_label = QLabel("AI平台:")
         platform_layout.addWidget(platform_label)
         
         self.parent.platform_combo = QComboBox()
         self.parent.platform_combo.currentTextChanged.connect(self.parent.update_platform_config)
         platform_layout.addWidget(self.parent.platform_combo)
+        
+        # 主题选择
+        theme_label = QLabel("主题:")
+        platform_layout.addWidget(theme_label)
+        
+        self.parent.theme_combo = QComboBox()
+        # 获取可用主题列表
+        themes = self.parent.theme_manager.get_available_themes()
+        self.parent.theme_combo.addItems(themes)
+        # 设置当前主题
+        current_theme = self.parent.settings.get('appearance', {}).get('theme', '默认主题')
+        if current_theme in themes:
+            self.parent.theme_combo.setCurrentText(current_theme)
+        # 连接主题切换信号
+        self.parent.theme_combo.currentTextChanged.connect(self.parent.change_theme)
+        platform_layout.addWidget(self.parent.theme_combo)
         
         # 状态指示器
         self.parent.status_indicator = QLabel("●")
@@ -326,7 +412,11 @@ class UIManager:
     
     def apply_theme(self, theme_name: str) -> None:
         """应用主题样式"""
-        stylesheet = self.parent.theme_manager.get_theme_stylesheet(theme_name)
+        # 获取自定义主题设置
+        custom_theme = self.parent.settings.get('appearance', {}).get('custom_theme', {})
+        
+        # 获取主题样式表
+        stylesheet = self.parent.theme_manager.get_theme_stylesheet(theme_name, custom_theme)
         self.parent.setStyleSheet(stylesheet)
         
         # 更新设置中的主题
@@ -335,6 +425,9 @@ class UIManager:
         
         # 更新UI组件样式
         self.update_ui_components()
+        
+        # 刷新聊天显示以应用新主题
+        self.parent.refresh_chat_display()
     
     def update_ui_components(self) -> None:
         """更新UI组件样式"""
@@ -365,13 +458,15 @@ class UIManager:
         """在聊天窗口中显示消息，优化样式和交互"""
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         
-        # 用户和AI消息有不同的样式区分，取消白底
-        if sender == "用户":
-            sender_name = "你"
-            message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-end; text-align: right; float: right;'"""
-        else:
-            sender_name = "AI"
-            message_style = """style='margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 70%; align-self: flex-start; text-align: left;'"""
+        # 获取当前主题
+        current_theme = self.parent.settings.get('appearance', {}).get('theme', '默认主题')
+        custom_theme = self.parent.settings.get('appearance', {}).get('custom_theme', {})
+        
+        # 获取消息样式
+        message_style_data = self.parent.theme_manager.get_message_style(sender, current_theme, custom_theme)
+        sender_name = message_style_data['sender_name']
+        message_style = message_style_data['message_style']
+        name_color = message_style_data['name_color']
         
         # 根据设置决定是否显示时间戳
         show_timestamp = self.parent.settings.get('chat', {}).get('show_timestamp', True)
@@ -385,16 +480,11 @@ class UIManager:
         
         # 消息内容
         if sender == "用户":
-            message_html += f"<div class='user-message' {message_style}><strong style='color: #1976d2;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{content}</div>"
+            message_html += f"<div class='user-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {message_style_data['content_color']};'>{content}</div>"
         else:
-            message_html += f"<div class='ai-message' {message_style}><strong style='color: #4caf50;'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px;'>{content}</div>"
+            message_html += f"<div class='ai-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {message_style_data['content_color']};'>{content}</div>"
         
-        # 只有用户自己发送的消息才显示编辑和删除按钮
-        if sender == "用户":
-            message_html += f"<div style='margin-top: 5px; text-align: right;'>"
-            message_html += f"<button onclick='parent.edit_message(\"{id}\")' style='margin: 0 2px; padding: 2px 5px; font-size: 10px;'>编辑</button>"
-            message_html += f"<button onclick='parent.delete_message(\"{id}\")' style='margin: 0 2px; padding: 2px 5px; font-size: 10px;'>删除</button>"
-            message_html += "</div>"
+
         
         message_html += "</div></div><div style='clear: both;'></div>"
         

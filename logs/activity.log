@@ -1,0 +1,4 @@
+{"timestamp": "2025-12-14 23:02:52.657", "timestamp_unix": "1765724572.657311", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-14 23:09:59.500", "timestamp_unix": "1765724999.5003018", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-14 23:16:16.017", "timestamp_unix": "1765725376.0175242", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-14 23:24:36.456", "timestamp_unix": "1765725876.4567914", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}

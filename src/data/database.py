@@ -50,6 +50,7 @@ class DatabaseManager:
         self.is_connected = False
         self.sync_thread = None
         self.sync_timer = None
+        self.is_syncing = False
         # 启动自动同步定时器
         self.setup_sync_timer()
     
@@ -574,11 +575,16 @@ class DatabaseManager:
                     self.parent.add_debug_info("已有同步线程在运行，请勿重复启动", "WARNING")
                 return False
             
+            # 设置同步中标志
+            self.is_syncing = True
+            
             # 创建并启动后台同步线程
             self.sync_thread = DatabaseSyncThread(self, upload, download)
             
             # 连接信号槽处理同步完成
             def on_sync_complete(success, message, result):
+                # 清除同步中标志
+                self.is_syncing = False
                 if hasattr(self.parent, 'add_debug_info'):
                     self.parent.add_debug_info(f"后台同步{message}", "INFO" if success else "ERROR")
                 # 清除线程引用
@@ -591,6 +597,8 @@ class DatabaseManager:
                 self.parent.add_debug_info(f"已启动后台同步线程，上传: {upload}, 下载: {download}", "INFO")
             return True
         except Exception as e:
+            # 确保清除同步中标志
+            self.is_syncing = False
             if hasattr(self.parent, 'add_debug_info'):
                 self.parent.add_debug_info(f"启动同步线程失败: {str(e)}", "ERROR")
             # 确保线程引用被清除

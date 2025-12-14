@@ -5,7 +5,7 @@
       "models": [
         "deepseek-v3.1"
       ],
-      "api_key": "Z0FBQUFBQnBQc1U0MVNCZEYxM21hT3FrM2tFM0FwWXNMeENsejQyMENsamtrRlNWbU1nX3VOaGZ3T2xjQmV3WFJ5UmZBazlMdkx4YXppbTZOd3ZvSFlpdUowVE84ZkZDejR0Zm9iTWo1UXdSaUk2cXY3bDVEUzNiT2NfdmJqM3JuZ1A2Vi1JSk41WGw=",
+      "api_key": "Z0FBQUFBQnBQdGEwQ0lFejdJOGlKT0VubUpUSGw0a3Zza252YkdRdmxKdHVuYXNubVF2OTgzcmRkd29zWUxQaUcyLWJ2QzZEUEItbk5PN0toWlZLa1NtZDFiaDBlcXJNaVZrN2N4SlBTN3ZqUE5ybDV6b2VjRFZpbVFCYkt0UU00T2ZjVUtGTEVVTlI=",
       "enabled": true,
       "api_type": "iflow",
       "base_url": "https://apis.iflow.cn/v1/chat/completions",
@@ -21,7 +21,7 @@
       "api_type": "openai",
       "base_url": "https://api.siliconflow.cn/v1/chat/completions",
       "api_key_hint": "none",
-      "api_key": "Z0FBQUFBQnBQc1U0elMwQzJZU0Z3SW1kb0FrMm1QTXVYMzhIZm16Mk5HREhUOTNVQnMxanVncGZCSnl0c3A0WTVVcnlQMjhCTGpfeGwwU1E5Ul9oVFl3VHR1VENBOXdmaWFfSFQyNUM1aFlDN1hrQS1YY1FfbUc3b2RDZm1RUDlkMkVFT1o5bnlQYTU2M0xyOGFGdzZxcUY3M3lMeGRUbGtnPT0="
+      "api_key": "Z0FBQUFBQnBQdGEwTHY1U21rZHBfUmNSeU5CQUR3eWg3MmR5UVR5WDVERHUySy05NUVzTkRYcFFFanZxX1UzRDFCQkpicW1PWHEtUXVrR3VSTDBFV2RZMFp0T3Fwc0lncVVsRHlGR3hFLUV3bFBPVHhYS1JaSjJIX0hNYTJjcTJLUFpGNGhaZDN6T0YzYV9EU2VFbHRWOGxWTFFoUXhFdk9RPT0="
     }
   },
   "settings": {
@@ -66,8 +66,8 @@
       "host": "156.238.234.55",
       "port": 3306,
       "database": "shuyinQIn_AIchat_pyqt6",
-      "username": "Z0FBQUFBQnBQc1U0bFdvYWZLVWlUdS1oTVE1YTJILS0yVW92YWpJN3EzUnA3RUFzSjh2VlRERTN1eUpEV0p3bFc3YVphVTRQdEJXWm1iTTJMUnhORUJTMTBYbkphN2ZvRGswd2dCUXJGVkxlZHlIcmRoMHQtcWs9",
-      "password": "Z0FBQUFBQnBQc1U0TjZMajhPZnpzZHpTZDNZRWREVjZvTkZyd3BCVmlrVHFVbllmWkNkT0x0RDFONHV5Vy1xVDJ2Smh0YVU1S2gtVks3bUtra2E3d2lqNE9BbjNTVzBaTnVQd1ZLcGQtbGExVUJKSEhXTDQzSXc9",
+      "username": "Z0FBQUFBQnBQdGEwa2pfSzhOMDZRbkF1d0QtSDZ6bU1LZnJwZTBYcXdvaUphZFdhdmNFUF9LQS1hXzRfemRRMTQzSzFzRExGTHJFQlRhNkV4V1VQaWZXaTZzUG1fTUJIUVBrLUNqY3dDYWtGN3NWWHpUTmdadDQ9",
+      "password": "Z0FBQUFBQnBQdGEwWHJtWW9fSEZFaXZ4RWw4YWhMV050X2U0aWwzYVlsMGdqTm90NTVuZWRYeXRLVkFxTmxULWloMmVRLVdYUU9sR1hjcXFtOVkwbFNLRnhwUGtvMkZhZEhySzROTlFWNW1VTlM2bFFSTUNMWGc9",
       "sync_interval": 60,
       "sync_on_startup": true,
       "sync_config": true,
@@ -86,6 +86,16 @@
       "copy_selected": "Ctrl+C",
       "paste_text": "Ctrl+V",
       "show_settings": "Ctrl+S"
-    }
+    },
+    "quick_replies": [
+      "你好，能帮我解答一个问题吗？",
+      "请详细解释一下这个概念。",
+      "可以提供更多相关信息吗？",
+      "这个问题的解决方案是什么？",
+      "感谢你的帮助！",
+      "请举个例子说明。",
+      "我不太明白，能再解释一遍吗？",
+      "这个功能是如何工作的？"
+    ]
   }
 }
