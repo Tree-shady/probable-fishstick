@@ -193,12 +193,23 @@ class ChatCore:
             
             timestamp_text = f" ({created_at})" if show_timestamp else ""
             
+            # 转换Markdown为HTML
+            try:
+                import markdown
+                md_content = markdown.markdown(content)
+            except ImportError:
+                # 如果没有安装markdown库，使用原始内容
+                md_content = content
+            except Exception as e:
+                # 如果Markdown转换失败，使用原始内容
+                md_content = content
+            
             # 构建消息HTML
             message_html = f"<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;'>"
             if sender == "用户":
-                message_html += f"<div class='user-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{content}</div></div>"
+                message_html += f"<div class='user-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{md_content}</div></div>"
             else:
-                message_html += f"<div class='ai-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{content}</div></div>"
+                message_html += f"<div class='ai-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{md_content}</div></div>"
             message_html += "</div><div style='clear: both;'></div>"
             
             html_content.append(message_html)

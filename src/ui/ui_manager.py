@@ -102,65 +102,6 @@ class UIManager:
         
         left_tab_widget.addTab(debug_tab, "调试")
         
-        # 监控面板标签页
-        monitor_tab = QWidget()
-        monitor_layout = QVBoxLayout(monitor_tab)
-        
-        # 监控面板标题
-        monitor_title = QLabel("系统监控")
-        monitor_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        monitor_title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        monitor_layout.addWidget(monitor_title)
-        
-        # 网络状态监控
-        network_group = QGroupBox("网络状态")
-        network_layout = QVBoxLayout(network_group)
-        
-        # 网络连接状态
-        self.parent.network_status_label = QLabel("网络状态: 未连接")
-        network_layout.addWidget(self.parent.network_status_label)
-        
-        # IP地址
-        self.parent.ip_address_label = QLabel("IP地址: - - - - - - - - - - ")
-        network_layout.addWidget(self.parent.ip_address_label)
-        
-        # 网络延迟
-        self.parent.network_latency_label = QLabel("延迟: - - ms")
-        network_layout.addWidget(self.parent.network_latency_label)
-        
-        monitor_layout.addWidget(network_group)
-        
-        # 数据库状态监控
-        db_group = QGroupBox("数据库状态")
-        db_layout = QVBoxLayout(db_group)
-        
-        # 数据库连接状态
-        self.parent.db_status_label = QLabel("数据库状态: 未连接")
-        db_layout.addWidget(self.parent.db_status_label)
-        
-        # 数据库类型
-        db_type = self.parent.settings.get('database', {}).get('type', 'unknown')
-        self.parent.db_type_label = QLabel(f"数据库类型: {db_type}")
-        db_layout.addWidget(self.parent.db_type_label)
-        
-        # 同步状态
-        self.parent.sync_status_label = QLabel("同步状态: 未同步")
-        db_layout.addWidget(self.parent.sync_status_label)
-        
-        monitor_layout.addWidget(db_group)
-        
-        # 系统资源监控
-        system_group = QGroupBox("系统资源")
-        system_layout = QVBoxLayout(system_group)
-        
-        # 内存使用情况
-        self.parent.memory_usage_label = QLabel("内存使用: - -%")
-        system_layout.addWidget(self.parent.memory_usage_label)
-        
-        monitor_layout.addWidget(system_group)
-        
-        left_tab_widget.addTab(monitor_tab, "监控")
-        
         # 添加左侧面板到分割器
         splitter.addWidget(left_panel)
         
@@ -229,6 +170,22 @@ class UIManager:
         # 连接主题切换信号
         self.parent.theme_combo.currentTextChanged.connect(self.parent.change_theme)
         platform_layout.addWidget(self.parent.theme_combo)
+        
+        # 字体大小选择
+        font_size_label = QLabel("字体大小:")
+        platform_layout.addWidget(font_size_label)
+        
+        self.parent.font_size_combo = QComboBox()
+        # 添加可用字体大小选项
+        font_sizes = ["10", "11", "12", "13", "14", "15", "16", "18", "20"]
+        self.parent.font_size_combo.addItems(font_sizes)
+        # 设置当前字体大小
+        current_font_size = str(self.parent.settings.get('appearance', {}).get('font_size', 12))
+        if current_font_size in font_sizes:
+            self.parent.font_size_combo.setCurrentText(current_font_size)
+        # 连接字体大小切换信号
+        self.parent.font_size_combo.currentTextChanged.connect(self.parent.change_font_size)
+        platform_layout.addWidget(self.parent.font_size_combo)
         
         # 状态指示器
         self.parent.status_indicator = QLabel("●")
@@ -467,6 +424,7 @@ class UIManager:
         sender_name = message_style_data['sender_name']
         message_style = message_style_data['message_style']
         name_color = message_style_data['name_color']
+        content_color = message_style_data['content_color']
         
         # 根据设置决定是否显示时间戳
         show_timestamp = self.parent.settings.get('chat', {}).get('show_timestamp', True)
@@ -475,18 +433,27 @@ class UIManager:
         # 生成唯一ID
         message_id = f"{time.time()}-{id(content)}"
         
+        # 转换Markdown为HTML
+        try:
+            import markdown
+            md_content = markdown.markdown(content)
+        except ImportError:
+            # 如果没有安装markdown库，使用原始内容
+            md_content = content
+        except Exception as e:
+            # 如果Markdown转换失败，使用原始内容
+            md_content = content
+        
         # 构建消息HTML
         message_html = f"<div class='message-container' style='display: flex; flex-direction: column; margin: 5px 0;' id='message_{message_id}'>"
         
         # 消息内容
         if sender == "用户":
-            message_html += f"<div class='user-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {message_style_data['content_color']};'>{content}</div>"
+            message_html += f"<div class='user-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{md_content}</div></div>"
         else:
-            message_html += f"<div class='ai-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {message_style_data['content_color']};'>{content}</div>"
+            message_html += f"<div class='ai-message' {message_style}><strong style='color: {name_color};'>{sender_name}{timestamp_text}:</strong><br><div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{md_content}</div></div>"
         
-
-        
-        message_html += "</div></div><div style='clear: both;'></div>"
+        message_html += "<div style='clear: both;'></div></div>"
         
         # 显示消息
         self.parent.chat_display.append(message_html)
@@ -494,9 +461,6 @@ class UIManager:
         # 自动滚动到底部
         if self.parent.settings['chat']['auto_scroll']:
             self.parent.chat_display.verticalScrollBar().setValue(self.parent.chat_display.verticalScrollBar().maximum())
-        
-        # 生成唯一ID
-        message_id = f"{time.time()}-{id(content)}"
         
         # 更新对话历史
         self.parent.conversation_history.append({

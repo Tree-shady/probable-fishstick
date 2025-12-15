@@ -91,6 +91,12 @@ class UniversalChatBotPyQt6(QMainWindow):
         # 初始化主题
         self._init_theme()
         
+        # 初始化快捷键
+        self._init_shortcuts()
+        
+        # 初始化右键菜单
+        self._init_context_menu()
+        
         # 初始化平台下拉框
         available_platforms = [p for p, config in self.platforms.items() if config['enabled']]
         self.platform_combo.clear()
@@ -108,9 +114,6 @@ class UniversalChatBotPyQt6(QMainWindow):
         
         # 延迟初始化数据库，在主窗口显示后再尝试
         QTimer.singleShot(2000, self.delayed_init_db)
-        
-        # 初始化监控数据更新定时器
-        self._init_monitor_timer()
     
     def _init_theme(self):
         """初始化主题设置"""
@@ -324,42 +327,55 @@ class UniversalChatBotPyQt6(QMainWindow):
         # 同步定时器功能已集成到database.py模块中
         pass
     
-    def _init_monitor_timer(self):
-        """初始化监控数据更新定时器"""
-        self.monitor_timer = QTimer(self)
-        self.monitor_timer.timeout.connect(self._update_monitor_data)
-        self.monitor_timer.start(1000)  # 每秒更新一次监控数据
+    def _init_shortcuts(self):
+        """初始化快捷键"""
+        from PyQt6.QtGui import QKeySequence, QShortcut
+        
+        # Ctrl+Enter 发送消息
+        send_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        send_shortcut.activated.connect(self.send_message)
+        
+        # Ctrl+K 清空输入框
+        clear_input_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        clear_input_shortcut.activated.connect(self.clear_input)
+        
+        # Ctrl+L 清空聊天显示
+        clear_chat_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
+        clear_chat_shortcut.activated.connect(self.clear_chat_display)
+        
+        # Ctrl+F 聚焦搜索框
+        search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        search_shortcut.activated.connect(self.search_input.setFocus)
+        
+        # Ctrl+N 开始新对话
+        new_conversation_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
+        new_conversation_shortcut.activated.connect(self.new_conversation)
+        
+        # Ctrl+S 保存对话历史
+        save_conversation_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        save_conversation_shortcut.activated.connect(self.save_conversation)
     
-    def _update_monitor_data(self):
-        """更新监控数据到UI组件"""
-        try:
-            # 更新网络状态
-            if hasattr(self, 'network_monitor'):
-                self.network_status_label.setText(f"网络状态: {self.network_monitor.network_status}")
-                self.ip_address_label.setText(f"IP地址: {self.network_monitor.ip_address}")
-                self.network_latency_label.setText(f"延迟: {self.network_monitor.ping_latency}")
-            
-            # 更新系统资源
-            import psutil
-            memory = psutil.virtual_memory()
-            memory_usage = f"内存使用: {memory.percent}%"
-            if hasattr(self, 'memory_usage_label'):
-                self.memory_usage_label.setText(memory_usage)
-            
-            # 更新数据库状态
-            if hasattr(self, 'db_manager') and self.db_manager:
-                db_status = "已连接" if self.db_manager.is_connected else "未连接"
-                db_type = self.settings.get('database', {}).get('type', 'unknown')
-                sync_status = "同步中" if hasattr(self.db_manager, 'is_syncing') and self.db_manager.is_syncing else "已同步"
-                
-                if hasattr(self, 'db_status_label'):
-                    self.db_status_label.setText(f"数据库状态: {db_status}")
-                if hasattr(self, 'db_type_label'):
-                    self.db_type_label.setText(f"数据库类型: {db_type}")
-                if hasattr(self, 'sync_status_label'):
-                    self.sync_status_label.setText(f"同步状态: {sync_status}")
-        except Exception as e:
-            self.add_debug_info(f"更新监控数据失败: {str(e)}", "ERROR")
+    def _init_context_menu(self):
+        """初始化右键菜单"""
+        from PyQt6.QtGui import QAction
+        from PyQt6.QtWidgets import QMenu
+        
+        # 为聊天显示区域添加右键菜单
+        self.chat_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.chat_display.customContextMenuRequested.connect(self._show_context_menu)
+        
+        # 创建右键菜单
+        self.context_menu = QMenu(self)
+        
+        # 复制选项
+        copy_action = QAction("复制", self)
+        copy_action.triggered.connect(self.copy_selected_text)
+        self.context_menu.addAction(copy_action)
+        
+        # 撤回选项
+        self.withdraw_action = QAction("撤回", self)
+        self.withdraw_action.triggered.connect(self._withdraw_message)
+        self.context_menu.addAction(self.withdraw_action)
     
     def display_message(self, sender: str, content: str) -> None:
         """在聊天窗口中显示消息"""
@@ -446,6 +462,61 @@ class UniversalChatBotPyQt6(QMainWindow):
         """清空输入框"""
         self.message_input.clear()
     
+    def copy_selected_text(self):
+        """复制选中的文本"""
+        selected_text = self.chat_display.textCursor().selectedText()
+        if selected_text:
+            clipboard = self.clipboard()
+            clipboard.setText(selected_text)
+    
+    def paste_text(self):
+        """粘贴文本"""
+        clipboard = self.clipboard()
+        paste_text = clipboard.text()
+        if paste_text:
+            self.message_input.insertPlainText(paste_text)
+    
+    def _show_context_menu(self, pos):
+        """显示右键菜单"""
+        # 只有当光标在消息上时才显示撤回选项
+        self.withdraw_action.setEnabled(True)
+        
+        # 显示菜单
+        self.context_menu.exec(self.chat_display.mapToGlobal(pos))
+    
+    def _withdraw_message(self):
+        """撤回消息"""
+        # 获取当前光标位置
+        cursor = self.chat_display.textCursor()
+        
+        # 遍历所有消息，找到包含当前光标位置的消息
+        for i, message in reversed(list(enumerate(self.conversation_history))):
+            # 获取消息内容
+            message_content = message['content']
+            
+            # 检查光标位置是否在该消息附近
+            cursor_position = cursor.position()
+            
+            # 刷新聊天显示，确保我们有最新的HTML内容
+            # 然后检查当前光标位置对应的消息
+            # 这里我们使用简单的方法：获取光标所在行的文本
+            cursor.select(cursor.SelectionType.LineUnderCursor)
+            line_text = cursor.selectedText()
+            
+            if message_content in line_text or line_text in message_content:
+                # 确认这是要撤回的消息
+                from PyQt6.QtWidgets import QMessageBox
+                reply = QMessageBox.question(self, "确认撤回", f"确定要撤回这条消息吗？",
+                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply == QMessageBox.StandardButton.Yes:
+                    # 移除消息
+                    self.conversation_history.pop(i)
+                    # 刷新聊天显示
+                    self.refresh_chat_display()
+                    # 保存对话历史
+                    self.save_conversation()
+                break
+    
     def search_conversation(self):
         """搜索对话历史"""
         search_text = self.search_input.text().strip()
@@ -458,7 +529,32 @@ class UniversalChatBotPyQt6(QMainWindow):
         
         # 显示搜索结果
         if search_results:
-            self.display_search_results(search_results, search_text)
+            # 清空搜索结果标签页
+            self.search_tab_widget.setCurrentWidget(self.search_results_tab)
+            self.search_results.clear()
+            
+            # 显示搜索结果
+            for result in search_results:
+                sender = result['sender']
+                content = result['content']
+                created_at = result.get('created_at', result.get('timestamp', ''))
+                
+                # 获取消息样式
+                current_theme = self.settings.get('appearance', {}).get('theme', '默认主题')
+                custom_theme = self.settings.get('appearance', {}).get('custom_theme', {})
+                message_style_data = self.theme_manager.get_message_style(sender, current_theme, custom_theme)
+                sender_name = message_style_data['sender_name']
+                message_style = message_style_data['message_style']
+                name_color = message_style_data['name_color']
+                content_color = message_style_data['content_color']
+                
+                # 构建搜索结果HTML
+                result_html = f"<div class='search-result-item' style='margin: 10px 0; padding: 10px; border-radius: 5px; border: 1px solid #ddd;'>"
+                result_html += f"<strong style='color: {name_color};'>{sender_name} ({created_at}):</strong><br>"
+                result_html += f"<div style='word-wrap: break-word; margin-top: 5px; color: {content_color};'>{content}</div>"
+                result_html += "</div>"
+                
+                self.search_results.append(result_html)
         else:
             QMessageBox.information(self, "搜索结果", f"未找到包含 '{search_text}' 的消息")
     
@@ -633,6 +729,28 @@ class UniversalChatBotPyQt6(QMainWindow):
     def change_theme(self, theme_name):
         """切换主题"""
         self.ui_manager.apply_theme(theme_name)
+    
+    def change_font_size(self, font_size_str):
+        """更改字体大小"""
+        try:
+            font_size = int(font_size_str)
+            # 更新设置
+            self.settings.setdefault('appearance', {})
+            self.settings['appearance']['font_size'] = font_size
+            self.settings_manager.update_settings(self.settings)
+            
+            # 应用新的字体大小
+            font = QFont()
+            font.setPointSize(font_size)
+            self.chat_display.setFont(font)
+            self.message_input.setFont(font)
+            self.debug_display.setFont(font)
+            self.debug_output.setFont(font)
+            
+            # 刷新聊天显示以应用新字体大小
+            self.refresh_chat_display()
+        except ValueError:
+            pass
     
     def load_quick_replies(self):
         """加载快捷回复列表"""
