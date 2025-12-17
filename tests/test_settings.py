@@ -87,8 +87,8 @@ class TestSettingsManager(unittest.TestCase):
         self.assertTrue(settings_manager.settings["chat"]["auto_scroll"], "auto_scroll设置应已重置为默认值True")
         self.assertTrue(settings_manager.settings["chat"]["streaming"], "streaming设置应已重置为默认值True")
     
-    def test_platform_config_encryption(self):
-        """测试平台配置的加密和解密"""
+    def test_platform_config_save_load(self):
+        """测试平台配置的保存和加载"""
         # 创建设置管理器
         settings_manager = SettingsManager(self.temp_config_file)
         
@@ -110,8 +110,8 @@ class TestSettingsManager(unittest.TestCase):
         # 重新加载设置
         new_settings_manager = SettingsManager(self.temp_config_file)
         
-        # 检查API密钥是否已正确解密
-        self.assertEqual(new_settings_manager.platforms[test_platform]["api_key"], "sk-test1234567890", "API密钥应已正确解密")
+        # 检查API密钥是否已正确保存和加载
+        self.assertEqual(new_settings_manager.platforms[test_platform]["api_key"], "sk-test1234567890", "API密钥应已正确保存和加载")
     
     def test_merge_dicts(self):
         """测试字典合并功能"""

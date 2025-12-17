@@ -7,3 +7,11 @@
 {"timestamp": "2025-12-15 15:34:45.129", "timestamp_unix": "1765784085.129395", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
 {"timestamp": "2025-12-15 15:51:42.609", "timestamp_unix": "1765785102.609007", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
 {"timestamp": "2025-12-15 15:52:14.619", "timestamp_unix": "1765785134.619043", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-17 23:14:31.104", "timestamp_unix": "1765984471.1042366", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-17 23:17:13.560", "timestamp_unix": "1765984633.5606506", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-17 23:18:16.074", "timestamp_unix": "1765984696.0744529", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-17 23:20:02.583", "timestamp_unix": "1765984802.5836103", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-17 23:24:11.199", "timestamp_unix": "1765985051.199843", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-17 23:25:32.360", "timestamp_unix": "1765985132.3600507", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-17 23:28:08.424", "timestamp_unix": "1765985288.424885", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}
+{"timestamp": "2025-12-17 23:30:35.337", "timestamp_unix": "1765985435.3370929", "log_type": "activity", "level": "INFO", "message": "聊天助手启动", "component": "app", "action": "startup"}

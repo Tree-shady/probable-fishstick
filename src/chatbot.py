@@ -14,7 +14,7 @@ from .data.statistics import StatisticsManager
 from .data.memory import MemoryManager
 from .utils.network import NetworkMonitor
 from .utils.helpers import load_json_file, save_json_file, get_current_timestamp
-from .utils.encryption import EncryptionManager
+
 from .utils.logging_manager import LoggingManager
 
 class UniversalChatBotPyQt6(QMainWindow):
@@ -79,8 +79,7 @@ class UniversalChatBotPyQt6(QMainWindow):
         from .utils.cache_manager import CacheManager
         self.cache_manager = CacheManager()
         
-        # 初始化加密管理器
-        self.encryption_manager = EncryptionManager()
+        
         
         # 初始化日志管理器
         self.logging_manager = LoggingManager()

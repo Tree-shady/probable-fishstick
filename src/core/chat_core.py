@@ -120,7 +120,7 @@ class ChatCore:
             await AsyncFileManager.async_save_json_file(self.conversation_file, self.parent.conversation_history)
         
         # 使用线程池执行异步保存，避免阻塞UI线程
-        asyncio.run_coroutine_threadsafe(async_save(), asyncio.get_event_loop())
+        asyncio.run(async_save())
     
     def load_conversation(self) -> None:
         """加载对话历史，确保每条消息都包含所有必需的字段"""
@@ -142,7 +142,7 @@ class ChatCore:
             self.parent.conversation_history = history
         
         # 使用线程池执行异步加载，避免阻塞UI线程
-        asyncio.run_coroutine_threadsafe(async_load(), asyncio.get_event_loop())
+        asyncio.run(async_load())
     
     def load_conversation_from_file(self, file_path: str) -> None:
         """从文件加载对话历史，确保每条消息都包含所有必需的字段"""
@@ -166,7 +166,7 @@ class ChatCore:
             self.parent.refresh_chat_display()
         
         # 使用线程池执行异步加载，避免阻塞UI线程
-        asyncio.run_coroutine_threadsafe(async_load(), asyncio.get_event_loop())
+        asyncio.run(async_load())
     
     def refresh_chat_display(self) -> None:
         """刷新聊天显示，使用优化的消息样式和批量加载"""

@@ -2,7 +2,6 @@ import os
 import json
 from typing import Dict, Any
 from ..utils.helpers import load_json_file, save_json_file, merge_dicts
-from ..utils.encryption import EncryptionManager
 
 
 class SettingsManager:
@@ -10,7 +9,6 @@ class SettingsManager:
     
     def __init__(self, config_file: str):
         self.config_file = config_file
-        self.encryption_manager = EncryptionManager()
         self.default_settings: Dict[str, Any] = {
             'window': {
                 'width': 1200,
@@ -99,27 +97,11 @@ class SettingsManager:
                         }
                     })
                     
-                    # 解密所有平台的API密钥
-                    for platform_name, platform_config in self.platforms.items():
-                        if 'api_key' in platform_config:
-                            platform_config['api_key'] = self.encryption_manager.decrypt(platform_config['api_key'])
-                    
                     # 处理应用设置，使用递归合并确保所有默认设置都被包含
                     self.settings = merge_dicts(self.default_settings, config_data.get('settings', {}))
-                    
-                    # 解密数据库的用户名和密码
-                    if 'database' in self.settings:
-                        if 'username' in self.settings['database'] and self.settings['database']['username']:
-                            self.settings['database']['username'] = self.encryption_manager.decrypt(self.settings['database']['username'])
-                        if 'password' in self.settings['database'] and self.settings['database']['password']:
-                            self.settings['database']['password'] = self.encryption_manager.decrypt(self.settings['database']['password'])
                 else:
                     # 旧格式：直接包含平台配置
                     self.platforms = config_data
-                    # 解密所有平台的API密钥
-                    for platform_name, platform_config in self.platforms.items():
-                        if 'api_key' in platform_config:
-                            platform_config['api_key'] = self.encryption_manager.decrypt(platform_config['api_key'])
                     # 使用默认设置
                     self.settings = self.default_settings.copy()
                     # 转换为新格式并保存
@@ -158,19 +140,6 @@ class SettingsManager:
             import copy
             temp_platforms = copy.deepcopy(self.platforms)
             temp_settings = copy.deepcopy(self.settings)
-            
-            # 对临时副本中的所有平台API密钥进行加密
-            for platform_name, platform_config in temp_platforms.items():
-                if 'api_key' in platform_config:
-                    # 加密API密钥
-                    platform_config['api_key'] = self.encryption_manager.encrypt(platform_config['api_key'])
-            
-            # 加密数据库的用户名和密码
-            if 'database' in temp_settings:
-                if 'username' in temp_settings['database'] and temp_settings['database']['username']:
-                    temp_settings['database']['username'] = self.encryption_manager.encrypt(temp_settings['database']['username'])
-                if 'password' in temp_settings['database'] and temp_settings['database']['password']:
-                    temp_settings['database']['password'] = self.encryption_manager.encrypt(temp_settings['database']['password'])
             
             # 构建完整的配置数据
             config_data = {
